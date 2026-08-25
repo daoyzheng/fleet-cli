@@ -159,6 +159,14 @@ doesn't stall on approval prompts; `FLEET_PERMISSION_MODE` sets a default.
 via [ntfy.sh](https://ntfy.sh) — once per agent that becomes **blocked** (it needs you
 now) and once when **everything settles**.
 
+Notifications are situation-specific and carry context pulled from the agent itself:
+
+| Situation | Push |
+|---|---|
+| An agent blocks on a question | `❓ <name> needs an answer` + what it is asking |
+| All settled, none blocked | `✅ ready for your review` + one line per agent |
+| All settled, some blocked | `⚠️ fleet done, N still need you` |
+
 **One instance watches every agent across every project** — it is not per-repo. It
 requires two consecutive quiet polls before declaring the fleet settled, and will not
 declare it at all until it has seen work actually happen (or `--grace`, default 120s,

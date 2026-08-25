@@ -11,6 +11,24 @@ _notify() { # title, message
     -d "$2" "https://ntfy.sh/$topic" >/dev/null 2>&1 || true
 }
 
+_agent_gist() { # name -> a short line describing what the agent is on about
+  herdr agent list 2>/dev/null | python3 -c "
+import sys,json,re
+try: a=json.load(sys.stdin)['result']['agents']
+except Exception: sys.exit()
+t=next((x.get('terminal_title_stripped') or x.get('terminal_title','') for x in a
+        if (x.get('name') or x['pane_id'])=='$1'), '')
+t=re.sub(r'^[^A-Za-z0-9]*','',t).strip()
+print(t[:110])" 2>/dev/null
+}
+
+_agent_ask() { # name -> the question/prompt an agent is blocked on
+  herdr agent read "$1" --source visible --lines 40 --format text 2>/dev/null \
+    | sed 's/\x1b\[[0-9;]*m//g' \
+    | grep -vE '^\s*$|^[─╭╰│╮╯]|^\s*❯|shift\+tab|for shortcuts|auto mode|manual mode' \
+    | tail -4 | tr '\n' ' ' | cut -c1-180
+}
+
 cmd_babysit() {
   local interval=30 topic="${FLEET_NTFY_TOPIC:-}" once=0 keep=0 grace=120
   while [ $# -gt 0 ]; do
@@ -39,8 +57,9 @@ cmd_babysit() {
 
   # keep the Mac awake for as long as this runs
   caffeinate -i -w $$ &
-  local caff=$!
-  trap 'kill $caff 2>/dev/null' EXIT INT TERM
+  FLEET_CAFF_PID=$!
+  trap '[ -n "${FLEET_CAFF_PID:-}" ] && kill "$FLEET_CAFF_PID" 2>/dev/null; return 0' INT TERM
+  trap '[ -n "${FLEET_CAFF_PID:-}" ] && kill "$FLEET_CAFF_PID" 2>/dev/null' EXIT
 
   echo "babysitting — topic: $topic, every ${interval}s${keep:+, staying up}. Ctrl-C to stop."
   local seen_blocked="" summary n_work n_block n_idle
@@ -69,7 +88,10 @@ for x in a:
     for a in $(printf '%s\n' "$named" | awk -F'|' '$2=="blocked"{print $1}'); do
       case " $seen_blocked " in
         *" $a "*) ;;
-        *) _notify "fleet: $a needs you" "Agent '$a' is blocked and waiting for input." high warning
+        *) local ask gist
+           gist=$(_agent_gist "$a"); ask=$(_agent_ask "$a")
+           _notify "❓ $a needs an answer" "${gist:+$gist
+}${ask:-Blocked and waiting for input.}" high question
            seen_blocked="$seen_blocked $a"
            echo "  [blocked] $a — notified" ;;
       esac
@@ -84,14 +106,26 @@ for x in a:
       quiet=$((quiet+1))
       if [ "$quiet" -ge 2 ] && { [ "$ever_worked" -eq 1 ] || [ "$elapsed" -ge "$grace" ]; }; then
         if [ "$announced" -eq 0 ]; then
-          summary=$(printf '%s\n' "$named" | awk -F'|' '{printf "%s: %s\n", $1, $2}')
-          _notify "fleet: all tasks settled" "$(printf '%s' "$summary" | head -c 400)" high white_check_mark
+          summary=""
+          local nm st
+          while IFS='|' read -r nm st; do
+            [ -n "$nm" ] || continue
+            summary="${summary}${nm} — $(_agent_gist "$nm")
+"
+          done <<EOS
+$named
+EOS
+          if [ "${n_block:-0}" -gt 0 ]; then
+            _notify "⚠️ fleet done, $n_block still need you" "$(printf '%s' "$summary" | head -c 380)" high warning
+          else
+            _notify "✅ ready for your review" "$(printf '%s' "$summary" | head -c 380)" high white_check_mark
+          fi
           echo ""
           echo "all settled — notified"
           printf '%s\n' "$summary" | sed 's/^/  /'
           announced=1
         fi
-        [ "$keep" -eq 0 ] && return 0
+        [ "$keep" -eq 0 ] && { kill "${FLEET_CAFF_PID:-0}" 2>/dev/null; return 0; }
       fi
     fi
 
