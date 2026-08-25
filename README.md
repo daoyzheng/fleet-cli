@@ -84,6 +84,7 @@ cp completions/_fleet ~/.zsh/completions/
 | `fleet watch` | `status`, refreshed every 5s |
 | `fleet wait <name>...` | Block until each agent settles — for scripting |
 | `fleet read <name> [lines]` | An agent's recent terminal output |
+| `fleet handoff <name>` | The agent's **full** final report from its session transcript |
 | `fleet` (no args) | Dashboard: agents, previews, task worktrees |
 | `fleet babysit [--keep]` | Keep the machine awake, watch every agent, push to your phone when it settles |
 | `fleet space <path> [--agent kind]` | Scaffold a workspace: agent + app + shell, nvim tab, lazygit tab |
@@ -146,6 +147,13 @@ holding the port.
 
 Dispatch in the morning, walk away, get a push when it's done.
 
+Reading what an agent produced:
+
+```bash
+fleet read <name>       # terminal scrollback, truncated to what fits
+fleet handoff <name>    # the full final report, nothing cut off
+```
+
 ```bash
 fleet run ~/src/web PROJ-42 "/ship ..." --mode auto
 fleet run ~/src/api PROJ-51 "/ship ..." --mode auto
@@ -196,6 +204,20 @@ FLEET_AGENT="claude"
 `fleet run` and `fleet space` pick the agent from `FLEET_AGENT_DEFAULTS` unless you
 pass `-k`/`--agent`. Notifications are prefixed with the agent kind (`[claude]`,
 `[cursor]`) so a mixed fleet stays legible on your phone.
+
+### Running it as a daemon
+
+`fleet babysit` only notifies while it is running. To never miss a completion, load it
+as a launch agent (macOS):
+
+```bash
+cp dev.fleet.babysit.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/dev.fleet.babysit.plist
+```
+
+Starts at login, restarts if it dies, logs to `~/.local/state/fleet/babysit.log`.
+`fleet babysit --stop` stops a foreground instance; to stop the daemon use
+`launchctl unload`, since `KeepAlive` will otherwise restart it.
 
 Only one `fleet babysit` can run at a time — a second one refuses rather than sending
 every notification twice.

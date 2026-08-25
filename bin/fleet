@@ -32,6 +32,11 @@ fleet — parallel agent dispatch over herdr
   fleet read <name> [lines]
       Print an agent's recent terminal output (default 120 lines).
 
+  fleet handoff <name> [n]
+      Print the agent's FULL final report from its session transcript, not the
+      terminal scrollback — nothing truncated. n = how many messages back.
+      Claude Code sessions only; Cursor does not keep a local transcript.
+
   fleet ready
       List only agents that are idle/blocked — i.e. waiting on you.
 
@@ -73,6 +78,9 @@ done
 : "${FMT:?fleet-fmt.py not found next to fleet or in ~/.local/libexec}"
 for c in "$SELF_DIR/fleet-trees.py" "$SELF_DIR/../libexec/fleet-trees.py" "$HOME/.local/libexec/fleet-trees.py"; do
   [ -f "$c" ] && { TREES="$c"; break; }
+done
+for c in "$SELF_DIR/fleet-handoff.py" "$SELF_DIR/../libexec/fleet-handoff.py" "$HOME/.local/libexec/fleet-handoff.py"; do
+  [ -f "$c" ] && { HANDOFF="$c"; break; }
 done
 for mod in fleet-preview.sh fleet-space.sh fleet-babysit.sh; do
   for c in "$SELF_DIR/$mod" "$SELF_DIR/../libexec/$mod" "$HOME/.local/libexec/$mod"; do
@@ -285,6 +293,18 @@ cmd_batch() {
   echo "dispatched $n task(s)"
 }
 
+cmd_handoff() {
+  local name="${1:?usage: fleet handoff <agent> [n]}" n="${2:-1}"
+  local cwd
+  cwd=$(herdr agent list 2>/dev/null | python3 -c "
+import sys,json
+try: a=json.load(sys.stdin)['result']['agents']
+except Exception: sys.exit()
+print(next((x['cwd'] for x in a if (x.get('name') or x['pane_id'])=='$name'), ''))")
+  [ -n "$cwd" ] || { echo "fleet: no agent named '$name'" >&2; return 1; }
+  python3 "$HANDOFF" "$cwd" "$n"
+}
+
 cmd_dash() {
   printf '\n\033[1mAGENTS\033[0m\n'
   cmd_status | sed 's/^/  /'
@@ -308,6 +328,7 @@ case "${1:-}" in
   watch)  while true; do clear; date "+%H:%M:%S"; cmd_status; sleep 5; done ;;
   wait)   shift; for a in "$@"; do echo "waiting: $a"; herdr agent wait "$a" >/dev/null; echo "  done: $a"; done ;;
   read)   shift; herdr agent read "$1" --lines "${2:-120}" --format text ;;
+  handoff) shift; cmd_handoff "$@" ;;
   ""|dash) cmd_dash ;;
   help|-h|--help) usage ;;
   *) usage; exit 1 ;;

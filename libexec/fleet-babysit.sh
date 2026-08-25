@@ -40,7 +40,16 @@ cmd_babysit() {
       --grace)    grace="$2"; shift 2 ;;
       --keep)     keep=1; shift ;;
       --test)     once=1; shift ;;
-      *) echo "usage: fleet babysit [--topic <t>] [--interval <s>] [--grace <s>] [--keep] [--test]" >&2; return 1 ;;
+      --stop)
+        local L="${XDG_STATE_HOME:-$HOME/.local/state}/fleet/babysit.lock"
+        if [ -f "$L" ] && kill -0 "$(cat "$L" 2>/dev/null)" 2>/dev/null; then
+          kill "$(cat "$L")" 2>/dev/null; pkill -f "caffeinate -i -w" 2>/dev/null
+          rm -f "$L"; echo "babysit stopped"
+        else
+          rm -f "$L"; echo "babysit was not running"
+        fi
+        return 0 ;;
+      *) echo "usage: fleet babysit [--topic <t>] [--interval <s>] [--grace <s>] [--keep] [--test] [--stop]" >&2; return 1 ;;
     esac
   done
   export FLEET_NTFY_TOPIC="$topic"
