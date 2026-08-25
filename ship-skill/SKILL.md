@@ -125,11 +125,15 @@ When the user says the change is good, integrate it:
 
 1. Confirm Stage 3 is still green against the current branch tip.
 2. Run `secret-scan <base-ref>` once more over the full branch.
-3. Commit (see **Commits and PRs** below), push the branch, open the PR against the
-   right forge, and fill in the repo's PR template.
-4. Stop the preview (`fleet preview --stop <name>`) and tell them the worktree can
+3. Commit (see **Commits and PRs** below) and push the branch.
+4. **Ask which branch the PR should target. Never assume, and never open a PR
+   against `main` or whatever the repo calls its default branch.** The integration
+   target is frequently a release, redesign, or develop branch, and a PR opened
+   against the wrong base has to be closed and redone. Wait for the answer, then
+   open the PR against that branch and fill in the repo's PR template.
+5. Stop the preview (`fleet preview --stop <name>`) and tell them the worktree can
    be removed once merged (`fleet trees --prune` cleans up afterwards).
-5. Report the PR URL.
+6. Report the PR URL.
 
 If the repo or the user has a preferred integration flow (squash, rebase, a release
 branch), follow that rather than assuming.
