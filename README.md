@@ -205,6 +205,31 @@ FLEET_AGENT="claude"
 pass `-k`/`--agent`. Notifications are prefixed with the agent kind (`[claude]`,
 `[cursor]`) so a mixed fleet stays legible on your phone.
 
+### Menu bar (SwiftBar)
+
+`swiftbar/fleet.10s.sh` renders live fleet state in the macOS menu bar:
+
+```
+◆ 2 needs you     red    — an agent is blocked
+◐ 3 working       amber  — agents are running
+✓ 4 ready         green  — finished, waiting on your review
+◇ fleet           grey   — nothing dispatched
+```
+
+Clicking through gives each agent's topic, its kind and worktree, **Focus this
+agent**, **Copy full handoff** (the complete report to your clipboard), clickable
+preview URLs, and a babysit on/off toggle.
+
+```bash
+brew install --cask swiftbar
+mkdir -p ~/.config/swiftbar-plugins
+cp swiftbar/fleet.10s.sh ~/.config/swiftbar-plugins/
+defaults write com.ameba.SwiftBar PluginDirectory -string "$HOME/.config/swiftbar-plugins"
+open -a SwiftBar
+```
+
+Refreshes every 10s (the `.10s.` in the filename — rename to change it).
+
 ### Raycast commands
 
 `raycast-scripts/` holds three script commands — point Raycast at the directory
