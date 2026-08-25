@@ -9,6 +9,8 @@ fleet — parallel agent dispatch over herdr
   fleet run <repo> <branch> <prompt> [-k claude|cursor] [-d <dir>]...
       Create a git worktree for <branch> off <repo>, start an agent in it,
       and submit <prompt>. Does not steal focus. Prints the agent name.
+      -m/--mode sets the agent permission mode (auto, acceptEdits, plan, ...)
+      for unattended runs; defaults to $FLEET_PERMISSION_MODE.
       -d/--add-dir grants the agent tool access to another directory
       (repeatable) — use it when the task spans repos that share a contract.
       Note this is full access, not read-only: the agent can edit there too.
@@ -32,6 +34,10 @@ fleet — parallel agent dispatch over herdr
 
   fleet ready
       List only agents that are idle/blocked — i.e. waiting on you.
+
+  fleet babysit [--topic <ntfy-topic>] [--interval <secs>] [--test]
+      Keep the Mac awake, watch every dispatched agent, and push a phone
+      notification when one blocks or when all of them settle.
 
   fleet space <path> [--agent claude|cursor|none] [--label name]
       Create a workspace with the standard layout: tab 1 agent + app + shell,
@@ -66,7 +72,7 @@ done
 for c in "$SELF_DIR/fleet-trees.py" "$SELF_DIR/../libexec/fleet-trees.py" "$HOME/.local/libexec/fleet-trees.py"; do
   [ -f "$c" ] && { TREES="$c"; break; }
 done
-for mod in fleet-preview.sh fleet-space.sh; do
+for mod in fleet-preview.sh fleet-space.sh fleet-babysit.sh; do
   for c in "$SELF_DIR/$mod" "$SELF_DIR/../libexec/$mod" "$HOME/.local/libexec/$mod"; do
     [ -f "$c" ] && { . "$c"; break; }
   done
@@ -110,12 +116,13 @@ _submit_prompt() { # name, prompt -> 0 submitted, 1 not
 }
 
 cmd_run() {
-  local repo="" branch="" prompt="" kind="claude"
+  local repo="" branch="" prompt="" kind="claude" pmode="${FLEET_PERMISSION_MODE:-}"
   local -a extra_dirs=()
   while [ $# -gt 0 ]; do
     case "$1" in
       -k|--kind) kind="$2"; shift 2 ;;
       -d|--add-dir) extra_dirs+=("${2/#\~/$HOME}"); shift 2 ;;
+      -m|--mode) pmode="$2"; shift 2 ;;
       *) if   [ -z "$repo" ];   then repo="$1"
          elif [ -z "$branch" ]; then branch="$1"
          else prompt="${prompt:+$prompt }$1"; fi; shift ;;
@@ -150,6 +157,7 @@ cmd_run() {
     [ -d "$ed" ] || { echo "fleet: --add-dir path not found: $ed" >&2; herdr workspace close "$ws" >/dev/null 2>&1; return 1; }
     agent_args+=(--add-dir "$ed")
   done
+  [ -n "$pmode" ] && agent_args+=(--permission-mode "$pmode")
   local started=0 attempt
   for attempt in 1 2 3; do
     if herdr agent start "$branch" --kind "$kind" --pane "$pane" --timeout 90000 \
@@ -275,6 +283,7 @@ case "${1:-}" in
   ready)  cmd_ready ;;
   trees)  shift; cmd_trees "$@" ;;
   preview) shift; cmd_preview "$@" ;;
+  babysit) shift; cmd_babysit "$@" ;;
   space)   shift; cmd_space "$@" ;;
   watch)  while true; do clear; date "+%H:%M:%S"; cmd_status; sleep 5; done ;;
   wait)   shift; for a in "$@"; do echo "waiting: $a"; herdr agent wait "$a" >/dev/null; echo "  done: $a"; done ;;

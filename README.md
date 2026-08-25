@@ -85,6 +85,7 @@ cp completions/_fleet ~/.zsh/completions/
 | `fleet wait <name>...` | Block until each agent settles — for scripting |
 | `fleet read <name> [lines]` | An agent's recent terminal output |
 | `fleet` (no args) | Dashboard: agents, previews, task worktrees |
+| `fleet babysit [--topic t]` | Keep the machine awake, watch the fleet, push to your phone when it settles |
 | `fleet space <path> [--agent kind]` | Scaffold a workspace: agent + app + shell, nvim tab, lazygit tab |
 | `fleet preview <path>` | Start that repo's dev server on a free port; print the localhost URL |
 | `fleet preview --list / --logs <n> / --stop <n> / --stop-all` | Manage running previews |
@@ -141,6 +142,28 @@ the repo's own lockfile to pick the package manager. `--dry-run` prints the comm
 without running it. Stopping kills the whole process group, then anything still
 holding the port.
 
+## Unattended runs
+
+Dispatch in the morning, walk away, get a push when it's done.
+
+```bash
+fleet run ~/src/web PROJ-42 "/ship ..." --mode auto
+fleet run ~/src/api PROJ-51 "/ship ..." --mode auto
+fleet babysit
+```
+
+`--mode` sets the agent's permission mode (`auto`, `acceptEdits`, `plan`, ...) so it
+doesn't stall on approval prompts; `FLEET_PERMISSION_MODE` sets a default.
+
+`fleet babysit` holds `caffeinate` for as long as it runs, polls every 30s, and pushes
+via [ntfy.sh](https://ntfy.sh) — once per agent that becomes **blocked** (it needs you
+now) and once when **everything settles**. Install the ntfy app, subscribe to your
+topic, and set it in the config. `fleet babysit --test` sends one notification so you
+can confirm delivery before relying on it.
+
+Topics are public to anyone who knows the name — use something unguessable, and
+remember agent names travel in the notification body.
+
 ## Configuration
 
 `~/.config/fleet/config` is sourced if present:
@@ -148,6 +171,8 @@ holding the port.
 ```sh
 # Colon-separated directories whose immediate children are git repos.
 FLEET_ROOTS="$HOME/src:$HOME/work"
+FLEET_NTFY_TOPIC="something-unguessable"
+FLEET_PERMISSION_MODE="auto"
 ```
 
 Defaults to `$HOME/dev`. Only `fleet trees` uses it.
