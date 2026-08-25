@@ -40,9 +40,10 @@ fleet — parallel agent dispatch over herdr
       Start that repo/worktree's dev server on a free, deterministic port and
       print the localhost URL. Also: --list, --logs <name>, --stop <name>, --stop-all.
 
-  fleet trees [--linked|--prune|--rm <branch>]
-      List worktrees with dirty/ahead/merged state and any agent attached.
-      --linked shows only task worktrees, --prune clears stale registrations,
+  fleet trees [--all|--prune|--rm <branch>]
+      List TASK worktrees (the ones agents create) with dirty/ahead/merged
+      state and any agent attached. Every repo's own folder is also a worktree,
+      so --all includes those. --prune clears stale registrations.
       --rm <branch> closes its workspace and removes the checkout.
 
 Examples:
@@ -136,12 +137,12 @@ cmd_trees() {
         done
       done
       echo "pruned stale registrations"
-      FLEET_ROOTS="$FLEET_ROOTS" python3 "$TREES" --linked
+      FLEET_ROOTS="$FLEET_ROOTS" python3 "$TREES"
       return 0 ;;
     --rm)
       [ -n "$target" ] || { echo "usage: fleet trees --rm <branch>" >&2; return 1; }
       cmd_trees_rm "$target"; return $? ;;
-    --linked|"") FLEET_ROOTS="$FLEET_ROOTS" python3 "$TREES" $arg; return 0 ;;
+    --all|--linked|"") FLEET_ROOTS="$FLEET_ROOTS" python3 "$TREES" $arg; return 0 ;;
     *) echo "usage: fleet trees [--linked|--prune|--rm <branch>]" >&2; return 1 ;;
   esac
 }
@@ -208,7 +209,7 @@ cmd_dash() {
   printf '\n\033[1mPREVIEWS\033[0m\n'
   cmd_preview --list
   printf '\n\033[1mTASK WORKTREES\033[0m\n'
-  FLEET_ROOTS="$FLEET_ROOTS" python3 "$TREES" --linked | sed 's/^/  /'
+  FLEET_ROOTS="$FLEET_ROOTS" python3 "$TREES" | sed 's/^/  /'
   printf '\n\033[2m  fleet run <repo> <branch> "<prompt>"   dispatch      fleet ready    what needs you\n'
   printf '  fleet space <path>                     open a project      fleet help     everything else\033[0m\n\n'
 }

@@ -28,7 +28,7 @@ _fleet() {
           run)     _values 'option' '-k' '--kind' ;;
         esac
       fi ;;
-    trees)  _values 'option' '--linked' '--prune' '--rm' ;;
+    trees)  _values 'option' '--all' '--prune' '--rm' ;;
     batch)  _files ;;
     read|wait)
       local -a agents

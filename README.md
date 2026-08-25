@@ -88,7 +88,7 @@ cp completions/_fleet ~/.zsh/completions/
 | `fleet space <path> [--agent kind]` | Scaffold a workspace: agent + app + shell, nvim tab, lazygit tab |
 | `fleet preview <path>` | Start that repo's dev server on a free port; print the localhost URL |
 | `fleet preview --list / --logs <n> / --stop <n> / --stop-all` | Manage running previews |
-| `fleet trees [--linked\|--prune\|--rm <branch>]` | Worktrees with dirty/ahead/merged state and attached agents |
+| `fleet trees [--all\|--prune\|--rm <branch>]` | Task worktrees with dirty/ahead/merged state and attached agents |
 
 ## Workspace layout
 
