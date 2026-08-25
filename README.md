@@ -70,9 +70,41 @@ ln -s ~/.claude/skills/standup ~/.cursor/skills/standup
 | `fleet watch` | `status`, refreshed every 5s |
 | `fleet wait <name>...` | Block until each agent settles — for scripting |
 | `fleet read <name> [lines]` | An agent's recent terminal output |
+| `fleet space <path> [--agent kind]` | Scaffold a workspace: agent + app + shell, nvim tab, lazygit tab |
 | `fleet preview <path>` | Start that repo's dev server on a free port; print the localhost URL |
 | `fleet preview --list / --logs <n> / --stop <n> / --stop-all` | Manage running previews |
 | `fleet trees [--prune]` | Every git worktree under `$FLEET_ROOTS`; prune dead registrations |
+
+## Workspace layout
+
+`fleet space` builds a consistent workspace for a repo or worktree:
+
+```
+tab 1  work   agent  |  app (fleet preview)
+                     |  shell
+tab 2  edit   nvim
+tab 3  git    lazygit
+```
+
+```bash
+fleet space ~/src/web                      # claude in tab 1
+fleet space ~/src/web --agent cursor
+fleet space ~/src/web --agent none --no-git
+```
+
+Commands are **pre-typed at each prompt, not auto-run** — press Enter to start
+them, or edit them first. That needs one hook in your shell rc:
+
+```zsh
+# zsh
+if [[ -n "${HERDR_PANE_CMD:-}" ]]; then
+  print -z -- "$HERDR_PANE_CMD"
+  unset HERDR_PANE_CMD
+fi
+```
+
+`print -z` pushes onto the editor buffer, so nothing is written to stdout during
+shell init — which matters if you use powerlevel10k's instant prompt.
 
 ## Previewing a worktree
 

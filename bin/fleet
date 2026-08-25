@@ -30,6 +30,10 @@ fleet — parallel agent dispatch over herdr
   fleet ready
       List only agents that are idle/blocked — i.e. waiting on you.
 
+  fleet space <path> [--agent claude|cursor|none] [--label name]
+      Create a workspace with the standard layout: tab 1 agent + app + shell,
+      tab 2 nvim, tab 3 lazygit. Commands are pre-typed, not auto-run.
+
   fleet preview <path> [--dry-run]
       Start that repo/worktree's dev server on a free, deterministic port and
       print the localhost URL. Also: --list, --logs <name>, --stop <name>, --stop-all.
@@ -54,8 +58,10 @@ for c in "$SELF_DIR/fleet-fmt.py" "$SELF_DIR/../libexec/fleet-fmt.py" "$HOME/.lo
   [ -f "$c" ] && { FMT="$c"; break; }
 done
 : "${FMT:?fleet-fmt.py not found next to fleet or in ~/.local/libexec}"
-for c in "$SELF_DIR/fleet-preview.sh" "$SELF_DIR/../libexec/fleet-preview.sh" "$HOME/.local/libexec/fleet-preview.sh"; do
-  [ -f "$c" ] && { . "$c"; break; }
+for mod in fleet-preview.sh fleet-space.sh; do
+  for c in "$SELF_DIR/$mod" "$SELF_DIR/../libexec/$mod" "$HOME/.local/libexec/$mod"; do
+    [ -f "$c" ] && { . "$c"; break; }
+  done
 done
 
 # Roots searched by `fleet trees`. Override with FLEET_ROOTS (colon-separated),
@@ -158,6 +164,7 @@ case "${1:-}" in
   ready)  cmd_ready ;;
   trees)  shift; cmd_trees "${1:-}" ;;
   preview) shift; cmd_preview "$@" ;;
+  space)   shift; cmd_space "$@" ;;
   watch)  while true; do clear; date "+%H:%M:%S"; cmd_status; sleep 5; done ;;
   wait)   shift; for a in "$@"; do echo "waiting: $a"; herdr agent wait "$a" >/dev/null; echo "  done: $a"; done ;;
   read)   shift; herdr agent read "$1" --lines "${2:-120}" --format text ;;
