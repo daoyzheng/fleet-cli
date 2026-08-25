@@ -205,6 +205,19 @@ FLEET_AGENT="claude"
 pass `-k`/`--agent`. Notifications are prefixed with the agent kind (`[claude]`,
 `[cursor]`) so a mixed fleet stays legible on your phone.
 
+### Raycast commands
+
+`raycast-scripts/` holds three script commands — point Raycast at the directory
+(Settings → Extensions → Script Commands → Add Directory):
+
+| Command | Does |
+|---|---|
+| **Toggle Fleet Babysit** | Start/stop the daemon, with inline confirmation |
+| **Fleet Status** | Every agent, preview and task worktree, plus daemon state |
+| **Fleet — What Needs Me** | Agents waiting on you, and live preview URLs |
+
+Assign a hotkey to the toggle if you flip it often.
+
 ### Running it as a daemon
 
 `fleet babysit` only notifies while it is running. To never miss a completion, load it
