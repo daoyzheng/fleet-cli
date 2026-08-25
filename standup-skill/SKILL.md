@@ -41,7 +41,11 @@ not three parallel ones.
 The rule that matters:
 
 - **Different repos, no shared contract → parallel.** Separate worktrees, dispatch together.
-- **Same repo → parallel only in separate worktrees**, and only if the diffs won't collide.
+- **Same repo, different branches → parallel, one worktree each.** This is the normal
+  case, not a special one: a ticket branch and a longer-lived branch in the same repo
+  get their own worktrees, their own agents, and their own dev-server ports. They never
+  see each other's files. Name each task after its branch so the two stay distinct.
+  Flag it only if both would edit the same files — then sequence them and say why.
 - **Shared contract across repos → sequential, one session**, with the contract change first.
 
 Flag any ordering dependency explicitly ("the schema has to land before the frontend

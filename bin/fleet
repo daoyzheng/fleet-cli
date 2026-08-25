@@ -90,6 +90,23 @@ need git; need python3; need herdr
 
 jq_py() { python3 -c "import sys,json;$1" ; }
 
+# Default agent kind for a path, from FLEET_AGENT_DEFAULTS ("prefix=kind:prefix=kind").
+# Longest matching prefix wins; falls back to $FLEET_AGENT, then claude.
+_default_kind() {
+  local path="$1" best="" bestlen=0 entry prefix kind
+  local IFS_SAVE="$IFS"; IFS=':'
+  local entries=(${FLEET_AGENT_DEFAULTS:-}); IFS="$IFS_SAVE"
+  for entry in ${entries+"${entries[@]}"}; do
+    prefix="${entry%%=*}"; kind="${entry#*=}"
+    prefix="${prefix/#\~/$HOME}"
+    case "$path" in
+      "$prefix"*) [ "${#prefix}" -gt "$bestlen" ] && { best="$kind"; bestlen="${#prefix}"; } ;;
+    esac
+  done
+  printf '%s' "${best:-${FLEET_AGENT:-claude}}"
+}
+
+
 _agent_field() { # name, field -> value
   herdr agent list 2>/dev/null | python3 -c "
 import sys,json
@@ -118,7 +135,7 @@ _submit_prompt() { # name, prompt -> 0 submitted, 1 not
 }
 
 cmd_run() {
-  local repo="" branch="" prompt="" kind="claude" pmode="${FLEET_PERMISSION_MODE:-}"
+  local repo="" branch="" prompt="" kind="" pmode="${FLEET_PERMISSION_MODE:-}"
   local -a extra_dirs=()
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -134,6 +151,7 @@ cmd_run() {
   case "$kind" in claude|cursor|codex|gemini|copilot|opencode|amp|droid) ;;
     *) echo "fleet: unsupported --kind '$kind'" >&2; exit 1 ;; esac
   repo="${repo/#\~/$HOME}"
+  [ -n "$kind" ] || kind=$(_default_kind "$(cd "$repo" 2>/dev/null && pwd || echo "$repo")")
   [ -d "$repo/.git" ] || { echo "not a git repo: $repo" >&2; exit 1; }
 
   local created pane

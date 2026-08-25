@@ -187,7 +187,18 @@ remember agent names travel in the notification body.
 FLEET_ROOTS="$HOME/src:$HOME/work"
 FLEET_NTFY_TOPIC="something-unguessable"
 FLEET_PERMISSION_MODE="auto"
+
+# Default agent per project tree; longest matching prefix wins.
+FLEET_AGENT_DEFAULTS="$HOME/work=cursor:$HOME/personal=claude"
+FLEET_AGENT="claude"
 ```
+
+`fleet run` and `fleet space` pick the agent from `FLEET_AGENT_DEFAULTS` unless you
+pass `-k`/`--agent`. Notifications are prefixed with the agent kind (`[claude]`,
+`[cursor]`) so a mixed fleet stays legible on your phone.
+
+Only one `fleet babysit` can run at a time — a second one refuses rather than sending
+every notification twice.
 
 Defaults to `$HOME/dev`. Only `fleet trees` uses it.
 

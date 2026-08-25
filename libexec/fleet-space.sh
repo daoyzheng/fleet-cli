@@ -11,7 +11,7 @@
 _ws_field() { python3 -c "import sys,json;print(json.load(sys.stdin)['result']$1)"; }
 
 cmd_space() {
-  local dir="" agent="claude" label="" no_edit=0 no_git=0
+  local dir="" agent="" label="" no_edit=0 no_git=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --agent) agent="$2"; shift 2 ;;
@@ -21,11 +21,12 @@ cmd_space() {
       *) dir="$1"; shift ;;
     esac
   done
-  [ -n "$dir" ] || { echo "usage: fleet space <repo-or-worktree-path> [--agent claude|cursor|none] [--label name] [--no-edit] [--no-git]" >&2; return 1; }
+  [ -n "$dir" ] || { echo "usage: fleet space <repo-or-worktree-path> [--agent claude|cursor|none]  (default per FLEET_AGENT_DEFAULTS) [--label name] [--no-edit] [--no-git]" >&2; return 1; }
   dir="${dir/#\~/$HOME}"
   [ -d "$dir" ] || { echo "no such directory: $dir" >&2; return 1; }
   dir="$(cd "$dir" && pwd)"
   [ -n "$label" ] || label="$(basename "$dir")"
+  [ -n "$agent" ] || agent=$(_default_kind "$dir")
 
   case "$agent" in claude|cursor|codex|gemini|copilot|opencode|amp|droid|none) ;;
     *) echo "fleet: unsupported --agent '$agent'" >&2; return 1 ;; esac

@@ -11,15 +11,17 @@ _notify() { # title, message
     -d "$2" "https://ntfy.sh/$topic" >/dev/null 2>&1 || true
 }
 
-_agent_gist() { # name -> a short line describing what the agent is on about
+_agent_gist() { # name -> "[kind] what the agent is on about"
   herdr agent list 2>/dev/null | python3 -c "
 import sys,json,re
 try: a=json.load(sys.stdin)['result']['agents']
 except Exception: sys.exit()
-t=next((x.get('terminal_title_stripped') or x.get('terminal_title','') for x in a
-        if (x.get('name') or x['pane_id'])=='$1'), '')
+m=next((x for x in a if (x.get('name') or x['pane_id'])=='$1'), None)
+if not m: sys.exit()
+t=m.get('terminal_title_stripped') or m.get('terminal_title','')
 t=re.sub(r'^[^A-Za-z0-9]*','',t).strip()
-print(t[:110])" 2>/dev/null
+k=m.get('agent','')
+print((f'[{k}] ' if k else '')+t[:100])" 2>/dev/null
 }
 
 _agent_ask() { # name -> the question/prompt an agent is blocked on
@@ -55,11 +57,20 @@ cmd_babysit() {
     return 0
   fi
 
+  # only one babysit at a time, or every notification goes out twice
+  local lock="${XDG_STATE_HOME:-$HOME/.local/state}/fleet/babysit.lock"
+  mkdir -p "$(dirname "$lock")"
+  if [ -f "$lock" ] && kill -0 "$(cat "$lock" 2>/dev/null)" 2>/dev/null; then
+    echo "fleet: babysit is already running (pid $(cat "$lock")). One instance watches everything." >&2
+    return 1
+  fi
+  echo $$ > "$lock"
+
   # keep the Mac awake for as long as this runs
   caffeinate -i -w $$ &
   FLEET_CAFF_PID=$!
   trap '[ -n "${FLEET_CAFF_PID:-}" ] && kill "$FLEET_CAFF_PID" 2>/dev/null; return 0' INT TERM
-  trap '[ -n "${FLEET_CAFF_PID:-}" ] && kill "$FLEET_CAFF_PID" 2>/dev/null' EXIT
+  trap '[ -n "${FLEET_CAFF_PID:-}" ] && kill "$FLEET_CAFF_PID" 2>/dev/null; rm -f "'"$lock"'"' EXIT
 
   echo "babysitting — topic: $topic, every ${interval}s${keep:+, staying up}. Ctrl-C to stop."
   local seen_blocked="" summary n_work n_block n_idle
@@ -125,7 +136,7 @@ EOS
           printf '%s\n' "$summary" | sed 's/^/  /'
           announced=1
         fi
-        [ "$keep" -eq 0 ] && { kill "${FLEET_CAFF_PID:-0}" 2>/dev/null; return 0; }
+        [ "$keep" -eq 0 ] && { kill "${FLEET_CAFF_PID:-0}" 2>/dev/null; rm -f "$lock"; return 0; }
       fi
     fi
 
