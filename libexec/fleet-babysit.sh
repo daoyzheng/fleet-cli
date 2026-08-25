@@ -11,8 +11,26 @@ _notify() { # title, message
     -d "$2" "https://ntfy.sh/$topic" >/dev/null 2>&1 || true
 }
 
-_agent_gist() { # name -> "[kind] what the agent is on about"
-  herdr agent list 2>/dev/null | python3 -c "
+_sessions() { # -> "name<TAB>socket" for every running herdr session
+  herdr session list 2>/dev/null | awk 'NR>1 && $2=="running" {print $1"\t"$NF}'
+}
+
+_all_agents() { # -> name|status|kind|session  across every running session
+  local nm sock
+  while IFS=$'\t' read -r nm sock; do
+    [ -n "$sock" ] || continue
+    HERDR_SOCKET_PATH="$sock" herdr agent list 2>/dev/null | python3 -c "
+import sys,json
+try: a=json.load(sys.stdin)['result']['agents']
+except Exception: sys.exit()
+for x in a:
+    if not x.get('name'): continue
+    print('|'.join([x['name'], x['agent_status'], x.get('agent',''), '$nm']))" 2>/dev/null
+  done < <(_sessions)
+}
+
+_agent_gist() { # name [socket] -> "[kind] what the agent is on about"
+  HERDR_SOCKET_PATH="${2:-$HERDR_SOCKET_PATH}" herdr agent list 2>/dev/null | python3 -c "
 import sys,json,re
 try: a=json.load(sys.stdin)['result']['agents']
 except Exception: sys.exit()
@@ -24,8 +42,8 @@ k=m.get('agent','')
 print((f'[{k}] ' if k else '')+t[:100])" 2>/dev/null
 }
 
-_agent_ask() { # name -> the question/prompt an agent is blocked on
-  herdr agent read "$1" --source visible --lines 40 --format text 2>/dev/null \
+_agent_ask() { # name [socket] -> the question an agent is blocked on
+  HERDR_SOCKET_PATH="${2:-$HERDR_SOCKET_PATH}" herdr agent read "$1" --source visible --lines 40 --format text 2>/dev/null \
     | sed 's/\x1b\[[0-9;]*m//g' \
     | grep -vE '^\s*$|^[─╭╰│╮╯]|^\s*❯|shift\+tab|for shortcuts|auto mode|manual mode' \
     | tail -4 | tr '\n' ' ' | cut -c1-180
@@ -107,22 +125,16 @@ cmd_babysit() {
   local elapsed=0 ever_worked=0 quiet=0 announced=0
 
   while true; do
-    local snapshot
-    snapshot=$(herdr agent list 2>/dev/null | python3 -c "
-import sys,json
-try: a=json.load(sys.stdin)['result']['agents']
-except Exception: a=[]
-for x in a:
-    print((x.get('name') or x['pane_id']), x['agent_status'], sep='|')" 2>/dev/null)
-
-    # only consider named agents (the ones fleet dispatched)
     local named
-    named=$(printf '%s\n' "$snapshot" | grep -v '^[a-zA-Z0-9]*:p[0-9]*|' || true)
-    [ -n "$named" ] || { echo "no dispatched agents to watch"; return 0; }
+    named=$(_all_agents)
+    if [ -z "$named" ]; then
+      [ "$keep" -eq 1 ] && { printf '\r  no dispatched agents   '; sleep "$interval"; elapsed=$((elapsed+interval)); continue; }
+      echo "no dispatched agents to watch"; return 0
+    fi
 
-    n_work=$(printf '%s\n' "$named" | grep -c '|working$' || true)
-    n_block=$(printf '%s\n' "$named" | grep -c '|blocked$' || true)
-    n_idle=$(printf '%s\n' "$named" | grep -cE '\|(idle|done)$' || true)
+    n_work=$(printf '%s\n' "$named" | awk -F'|' '$2=="working"' | wc -l | tr -d ' ')
+    n_block=$(printf '%s\n' "$named" | awk -F'|' '$2=="blocked"' | wc -l | tr -d ' ')
+    n_idle=$(printf '%s\n' "$named" | awk -F'|' '$2=="idle"||$2=="done"' | wc -l | tr -d ' ')
 
     # notify once per newly-blocked agent — these need a human now
     local a

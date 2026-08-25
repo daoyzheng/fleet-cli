@@ -14,15 +14,19 @@ PLIST="$HOME/Library/LaunchAgents/dev.fleet.babysit.plist"
 
 herdr status >/dev/null 2>&1 || { echo "fleet : off"; echo "---"; echo "herdr is not running"; exit 0; }
 
-AGENTS=$(herdr agent list 2>/dev/null | python3 -c "
+# every running herdr session, not just the default one
+AGENTS=$(herdr session list 2>/dev/null | awk 'NR>1 && $2=="running" {print $1"\t"$NF}' | while IFS=$'\t' read -r sname ssock; do
+  [ -n "$ssock" ] || continue
+  HERDR_SOCKET_PATH="$ssock" herdr agent list 2>/dev/null | python3 -c "
 import sys,json
 try: a=json.load(sys.stdin)['result']['agents']
 except Exception: a=[]
 for x in a:
     if not x.get('name'): continue
     t=(x.get('terminal_title_stripped') or '').strip()
-    print('\t'.join([x['name'], x['agent_status'], x['agent'], x['cwd'], t[:60]]))
-" 2>/dev/null)
+    print('\t'.join([x['name'], x['agent_status'], x['agent'], x['cwd'], t[:60], '$sname']))
+" 2>/dev/null
+done)
 
 WORK=$(printf '%s\n' "$AGENTS" | grep -c $'\tworking\t' || true)
 BLOCK=$(printf '%s\n' "$AGENTS" | grep -c $'\tblocked\t' || true)
@@ -43,7 +47,7 @@ echo "---"
 
 if [ -n "$AGENTS" ]; then
   echo "AGENTS | size=11 color=#8a8a8a"
-  while IFS=$'\t' read -r name st kind cwd title; do
+  while IFS=$'\t' read -r name st kind cwd title sess; do
     [ -n "$name" ] || continue
     case "$st" in
       blocked) icon="◆"; col="#c9524f" ;;
@@ -52,7 +56,7 @@ if [ -n "$AGENTS" ]; then
     esac
     echo "$icon $name — $st | color=$col"
     [ -n "$title" ] && echo "--$title | size=11 color=#8a8a8a"
-    echo "--[$kind] ${cwd/#$HOME/~} | size=11 color=#8a8a8a"
+    echo "--[$kind${sess:+ · $sess}] ${cwd/#$HOME/~} | size=11 color=#8a8a8a"
     echo "-----"
     echo "--Focus this agent | bash='herdr' param1='agent' param2='focus' param3=\"$name\" terminal=false"
     echo "--Copy full handoff | bash='/bin/bash' param1='-c' param2=\"$FLEET handoff '$name' | pbcopy\" terminal=false"
