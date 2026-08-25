@@ -40,16 +40,37 @@ cmd_babysit() {
       --grace)    grace="$2"; shift 2 ;;
       --keep)     keep=1; shift ;;
       --test)     once=1; shift ;;
+      --toggle)
+        local P="$HOME/Library/LaunchAgents/dev.fleet.babysit.plist"
+        if launchctl list 2>/dev/null | grep -q "dev.fleet.babysit"; then
+          launchctl unload "$P" 2>/dev/null
+          pkill -f "caffeinate -i -w" 2>/dev/null || true
+          rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/fleet/babysit.lock"
+          echo "🛑 babysit stopped — no phone notifications"
+        elif [ -f "$P" ]; then
+          launchctl load "$P" 2>/dev/null; sleep 2
+          if launchctl list 2>/dev/null | grep -q "dev.fleet.babysit"; then
+            echo "🛎️ babysit running — Mac stays awake, phone gets pushes"
+          else
+            echo "⚠️ failed to start — see ~/.local/state/fleet/babysit.err"
+          fi
+        else
+          echo "⚠️ no launch agent installed at $P"
+        fi
+        return 0 ;;
+      --status)
+        launchctl list 2>/dev/null | grep -q "dev.fleet.babysit" && echo on || echo off
+        return 0 ;;
       --stop)
         local L="${XDG_STATE_HOME:-$HOME/.local/state}/fleet/babysit.lock"
         if [ -f "$L" ] && kill -0 "$(cat "$L" 2>/dev/null)" 2>/dev/null; then
-          kill "$(cat "$L")" 2>/dev/null; pkill -f "caffeinate -i -w" 2>/dev/null
+          kill "$(cat "$L")" 2>/dev/null || true; pkill -f "caffeinate -i -w" 2>/dev/null || true
           rm -f "$L"; echo "babysit stopped"
         else
           rm -f "$L"; echo "babysit was not running"
         fi
         return 0 ;;
-      *) echo "usage: fleet babysit [--topic <t>] [--interval <s>] [--grace <s>] [--keep] [--test] [--stop]" >&2; return 1 ;;
+      *) echo "usage: fleet babysit [--topic <t>] [--interval <s>] [--grace <s>] [--keep] [--test] [--stop|--toggle|--status]" >&2; return 1 ;;
     esac
   done
   export FLEET_NTFY_TOPIC="$topic"

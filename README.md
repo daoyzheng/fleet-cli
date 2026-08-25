@@ -44,11 +44,19 @@ Without it herdr infers agent state from terminal titles, which is a guess.
 
 ```bash
 git clone https://github.com/<you>/fleet-cli.git
-cd fleet-cli && ./install.sh
+cd fleet-cli
+./install.sh          # scripts only
+./install.sh --ui     # also the launch agent, SwiftBar and Raycast wiring
 ```
 
-Installs `fleet` and `secret-scan` into `~/.local/bin` and the formatter into
+`install.sh` copies `fleet` and `secret-scan` into `~/.local/bin` and the helpers into
 `~/.local/libexec`. Make sure `~/.local/bin` is on your `PATH`.
+
+`--ui` additionally loads the babysit launch agent and points SwiftBar at this repo's
+`swiftbar/` directory. **The UI integrations read the repo directly** — there is no
+second copy, so `git pull` updates the menu bar plugin and Raycast commands with no
+further steps. Raycast needs one manual step: Settings → Extensions → Script Commands
+→ Add Directory → this repo's `raycast-scripts/`.
 
 To use the skills, symlink them where your agent looks — so they stay versioned
 with this repo rather than drifting on one machine:
@@ -222,9 +230,7 @@ preview URLs, and a babysit on/off toggle.
 
 ```bash
 brew install --cask swiftbar
-mkdir -p ~/.config/swiftbar-plugins
-cp swiftbar/fleet.10s.sh ~/.config/swiftbar-plugins/
-defaults write com.ameba.SwiftBar PluginDirectory -string "$HOME/.config/swiftbar-plugins"
+./install.sh --ui     # points SwiftBar at swiftbar/ in this repo
 open -a SwiftBar
 ```
 
@@ -249,13 +255,12 @@ Assign a hotkey to the toggle if you flip it often.
 as a launch agent (macOS):
 
 ```bash
-cp dev.fleet.babysit.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/dev.fleet.babysit.plist
+./install.sh --ui     # renders the plist for your $HOME and loads it
 ```
 
 Starts at login, restarts if it dies, logs to `~/.local/state/fleet/babysit.log`.
-`fleet babysit --stop` stops a foreground instance; to stop the daemon use
-`launchctl unload`, since `KeepAlive` will otherwise restart it.
+`fleet babysit --toggle` starts or stops the daemon (this is what the menu bar and
+Raycast call), `--status` prints `on`/`off`, and `--stop` kills a foreground instance.
 
 Only one `fleet babysit` can run at a time — a second one refuses rather than sending
 every notification twice.

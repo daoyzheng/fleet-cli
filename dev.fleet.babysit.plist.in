@@ -5,7 +5,7 @@
   <key>Label</key><string>dev.fleet.babysit</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/dzheng/.local/bin/fleet</string>
+    <string>__HOME__/.local/bin/fleet</string>
     <string>babysit</string>
     <string>--keep</string>
     <string>--interval</string>
@@ -13,13 +13,13 @@
   </array>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>PATH</key><string>/Users/dzheng/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-    <key>HOME</key><string>/Users/dzheng</string>
+    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>HOME</key><string>__HOME__</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>30</integer>
-  <key>StandardOutPath</key><string>/Users/dzheng/.local/state/fleet/babysit.log</string>
-  <key>StandardErrorPath</key><string>/Users/dzheng/.local/state/fleet/babysit.err</string>
+  <key>StandardOutPath</key><string>__HOME__/.local/state/fleet/babysit.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/.local/state/fleet/babysit.err</string>
 </dict>
 </plist>

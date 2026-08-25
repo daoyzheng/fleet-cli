@@ -11,7 +11,6 @@
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/bin:/bin"
 FLEET="$HOME/.local/bin/fleet"
 PLIST="$HOME/Library/LaunchAgents/dev.fleet.babysit.plist"
-TOGGLE="$HOME/.config/raycast-scripts/fleet-babysit-toggle.sh"
 
 herdr status >/dev/null 2>&1 || { echo "fleet : off"; echo "---"; echo "herdr is not running"; exit 0; }
 
@@ -74,11 +73,11 @@ if [ -n "$PREV" ]; then
 fi
 
 echo "---"
-if launchctl list 2>/dev/null | grep -q "dev.fleet.babysit"; then
+if [ "$("$FLEET" babysit --status 2>/dev/null)" = "on" ]; then
   echo "🛎️ Babysit: on | color=#2f7d57"
-  echo "--Stop babysit | bash=\"$TOGGLE\" terminal=false refresh=true"
+  echo "--Stop babysit | bash=\"$FLEET\" param1='babysit' param2='--toggle' terminal=false refresh=true"
 else
   echo "🛑 Babysit: off | color=#c9524f"
-  echo "--Start babysit | bash=\"$TOGGLE\" terminal=false refresh=true"
+  echo "--Start babysit | bash=\"$FLEET\" param1='babysit' param2='--toggle' terminal=false refresh=true"
 fi
 echo "Refresh | refresh=true"
