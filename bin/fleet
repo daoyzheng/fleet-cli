@@ -9,8 +9,9 @@ fleet — parallel agent dispatch over herdr
   fleet run <repo> <branch> <prompt> [-k claude|cursor] [-d <dir>]...
       Create a git worktree for <branch> off <repo>, start an agent in it,
       and submit <prompt>. Does not steal focus. Prints the agent name.
-      -d/--add-dir gives the agent read access to another repo (repeatable) —
-      use it when the task spans repos that share a contract.
+      -d/--add-dir grants the agent tool access to another directory
+      (repeatable) — use it when the task spans repos that share a contract.
+      Note this is full access, not read-only: the agent can edit there too.
 
   fleet batch <file>
       Dispatch every line of a plan file. Format, one task per line:
