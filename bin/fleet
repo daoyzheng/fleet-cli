@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# fleet — dispatch and supervise parallel AI coding agents via herdr.
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+fleet — parallel agent dispatch over herdr
+
+  fleet run <repo> <branch> <prompt> [-k claude|cursor]
+      Create a git worktree for <branch> off <repo>, start an agent in it,
+      and submit <prompt>. Does not steal focus. Prints the agent name.
+
+  fleet batch <file>
+      Dispatch every line of a plan file. Format, one task per line:
+          <repo> | <branch> | <prompt>
+      Blank lines and lines starting with # are ignored.
+
+  fleet status
+      One line per agent: name/pane, kind, state, cwd.
+
+  fleet watch
+      status, refreshed every 5s until you Ctrl-C.
+
+  fleet wait <name> [<name>...]
+      Block until each agent is idle/done/blocked.
+
+  fleet read <name> [lines]
+      Print an agent's recent terminal output (default 120 lines).
+
+  fleet ready
+      List only agents that are idle/blocked — i.e. waiting on you.
+
+  fleet trees [--prune]
+      List every git worktree under $FLEET_ROOTS (default ~/dev).
+      --prune removes worktree registrations whose directory is already gone.
+
+Examples:
+  fleet run ~/src/api PROJ-42 "/ship fix the timezone rollover"
+  fleet run ~/src/web PROJ-43 "/ship add the export button" -k cursor
+  fleet ready
+  fleet read PROJ-42
+USAGE
+}
+
+# Locate the python formatter: alongside the script (repo layout), then libexec.
+SELF="${BASH_SOURCE[0]}"
+while [ -L "$SELF" ]; do SELF="$(readlink "$SELF")"; done
+SELF_DIR="$(cd "$(dirname "$SELF")" && pwd)"
+for c in "$SELF_DIR/fleet-fmt.py" "$SELF_DIR/../libexec/fleet-fmt.py" "$HOME/.local/libexec/fleet-fmt.py"; do
+  [ -f "$c" ] && { FMT="$c"; break; }
+done
+: "${FMT:?fleet-fmt.py not found next to fleet or in ~/.local/libexec}"
+
+# Roots searched by `fleet trees`. Override with FLEET_ROOTS (colon-separated),
+# or set it in ~/.config/fleet/config.
+[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/fleet/config" ] && . "${XDG_CONFIG_HOME:-$HOME/.config}/fleet/config"
+FLEET_ROOTS="${FLEET_ROOTS:-$HOME/dev}"
+
+need() { command -v "$1" >/dev/null 2>&1 || { echo "fleet: missing dependency '$1'" >&2; exit 127; }; }
+need git; need python3; need herdr
+
+jq_py() { python3 -c "import sys,json;$1" ; }
+
+cmd_run() {
+  local repo="" branch="" prompt="" kind="claude"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -k|--kind) kind="$2"; shift 2 ;;
+      *) if   [ -z "$repo" ];   then repo="$1"
+         elif [ -z "$branch" ]; then branch="$1"
+         else prompt="${prompt:+$prompt }$1"; fi; shift ;;
+    esac
+  done
+  [ -n "$repo" ] && [ -n "$branch" ] && [ -n "$prompt" ] || { usage; exit 1; }
+  case "$kind" in claude|cursor|codex|gemini|copilot|opencode|amp|droid) ;;
+    *) echo "fleet: unsupported --kind '$kind'" >&2; exit 1 ;; esac
+  repo="${repo/#\~/$HOME}"
+  [ -d "$repo/.git" ] || { echo "not a git repo: $repo" >&2; exit 1; }
+
+  local created pane
+  created=$(herdr worktree create --cwd "$repo" --branch "$branch" --no-focus --json)
+  pane=$(printf '%s' "$created" | jq_py "print(json.load(sys.stdin)['result']['root_pane']['pane_id'])")
+
+  herdr agent start "$branch" --kind "$kind" --pane "$pane" --timeout 90000 >/dev/null
+  herdr agent prompt "$branch" "$prompt" >/dev/null
+  echo "$branch  ($kind in $pane)"
+}
+
+cmd_trees() {
+  local prune="${1:-}"
+  local IFS_SAVE="$IFS"; IFS=':'
+  local roots=($FLEET_ROOTS); IFS="$IFS_SAVE"
+  local d r
+  for root in "${roots[@]}"; do
+  for d in "$root"/*/; do
+    r="${d%/}"
+    [ -d "$r/.git" ] || continue
+    local out; out=$(git -C "$r" worktree list --porcelain 2>/dev/null) || continue
+    printf '%s\n' "$out" | awk -v repo="$(basename "$r")" '
+      /^worktree /{path=$2}
+      /^branch /{br=$2; sub("refs/heads/","",br)}
+      /^detached/{br="(detached)"}
+      /^$/{if(path){printf "%-22s %-34s %s\n", repo, br, path; path=""; br=""}}
+      END{if(path) printf "%-22s %-34s %s\n", repo, br, path}'
+    if [ "$prune" = "--prune" ]; then
+      git -C "$r" worktree prune 2>/dev/null
+    fi
+  done
+  done
+  [ "$prune" = "--prune" ] && echo "pruned stale registrations"
+  return 0
+}
+
+cmd_status() {
+  herdr agent list | python3 "$FMT" status
+}
+
+cmd_ready() {
+  herdr agent list | python3 "$FMT" ready
+}
+
+cmd_batch() {
+  local file="${1:?usage: fleet batch <file>}"
+  [ -f "$file" ] || { echo "no such file: $file" >&2; exit 1; }
+  local n=0
+  while IFS='|' read -r repo branch prompt; do
+    repo="$(echo "${repo:-}" | xargs)"; branch="$(echo "${branch:-}" | xargs)"
+    prompt="$(echo "${prompt:-}" | sed -e 's/^ *//' -e 's/ *$//')"
+    case "$repo" in ''|\#*) continue ;; esac
+    [ -n "$branch" ] && [ -n "$prompt" ] || { echo "skipping malformed line: $repo" >&2; continue; }
+    cmd_run "$repo" "$branch" "$prompt"
+    n=$((n+1))
+  done < "$file"
+  echo "dispatched $n task(s)"
+}
+
+case "${1:-}" in
+  run)    shift; cmd_run "$@" ;;
+  batch)  shift; cmd_batch "$@" ;;
+  status) cmd_status ;;
+  ready)  cmd_ready ;;
+  trees)  shift; cmd_trees "${1:-}" ;;
+  watch)  while true; do clear; date "+%H:%M:%S"; cmd_status; sleep 5; done ;;
+  wait)   shift; for a in "$@"; do echo "waiting: $a"; herdr agent wait "$a" >/dev/null; echo "  done: $a"; done ;;
+  read)   shift; herdr agent read "$1" --lines "${2:-120}" --format text ;;
+  ""|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac
