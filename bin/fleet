@@ -207,7 +207,7 @@ case "${1:-}" in
   batch)  shift; cmd_batch "$@" ;;
   status) cmd_status ;;
   ready)  cmd_ready ;;
-  trees)  shift; cmd_trees "${1:-}" ;;
+  trees)  shift; cmd_trees "$@" ;;
   preview) shift; cmd_preview "$@" ;;
   space)   shift; cmd_space "$@" ;;
   watch)  while true; do clear; date "+%H:%M:%S"; cmd_status; sleep 5; done ;;
