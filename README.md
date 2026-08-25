@@ -85,7 +85,7 @@ cp completions/_fleet ~/.zsh/completions/
 | `fleet wait <name>...` | Block until each agent settles — for scripting |
 | `fleet read <name> [lines]` | An agent's recent terminal output |
 | `fleet` (no args) | Dashboard: agents, previews, task worktrees |
-| `fleet babysit [--topic t]` | Keep the machine awake, watch the fleet, push to your phone when it settles |
+| `fleet babysit [--keep]` | Keep the machine awake, watch every agent, push to your phone when it settles |
 | `fleet space <path> [--agent kind]` | Scaffold a workspace: agent + app + shell, nvim tab, lazygit tab |
 | `fleet preview <path>` | Start that repo's dev server on a free port; print the localhost URL |
 | `fleet preview --list / --logs <n> / --stop <n> / --stop-all` | Manage running previews |
@@ -157,7 +157,13 @@ doesn't stall on approval prompts; `FLEET_PERMISSION_MODE` sets a default.
 
 `fleet babysit` holds `caffeinate` for as long as it runs, polls every 30s, and pushes
 via [ntfy.sh](https://ntfy.sh) — once per agent that becomes **blocked** (it needs you
-now) and once when **everything settles**. Install the ntfy app, subscribe to your
+now) and once when **everything settles**.
+
+**One instance watches every agent across every project** — it is not per-repo. It
+requires two consecutive quiet polls before declaring the fleet settled, and will not
+declare it at all until it has seen work actually happen (or `--grace`, default 120s,
+expires), so it can't fire the moment you dispatch. `--keep` stays up after settling so
+you can add tasks through the day. Install the ntfy app, subscribe to your
 topic, and set it in the config. `fleet babysit --test` sends one notification so you
 can confirm delivery before relying on it.
 

@@ -12,13 +12,15 @@ _notify() { # title, message
 }
 
 cmd_babysit() {
-  local interval=30 topic="${FLEET_NTFY_TOPIC:-}" once=0
+  local interval=30 topic="${FLEET_NTFY_TOPIC:-}" once=0 keep=0 grace=120
   while [ $# -gt 0 ]; do
     case "$1" in
       --topic)    topic="$2"; shift 2 ;;
       --interval) interval="$2"; shift 2 ;;
+      --grace)    grace="$2"; shift 2 ;;
+      --keep)     keep=1; shift ;;
       --test)     once=1; shift ;;
-      *) echo "usage: fleet babysit [--topic <ntfy-topic>] [--interval <secs>] [--test]" >&2; return 1 ;;
+      *) echo "usage: fleet babysit [--topic <t>] [--interval <s>] [--grace <s>] [--keep] [--test]" >&2; return 1 ;;
     esac
   done
   export FLEET_NTFY_TOPIC="$topic"
@@ -40,8 +42,9 @@ cmd_babysit() {
   local caff=$!
   trap 'kill $caff 2>/dev/null' EXIT INT TERM
 
-  echo "babysitting — topic: $topic, every ${interval}s. Ctrl-C to stop."
+  echo "babysitting — topic: $topic, every ${interval}s${keep:+, staying up}. Ctrl-C to stop."
   local seen_blocked="" summary n_work n_block n_idle
+  local elapsed=0 ever_worked=0 quiet=0 announced=0
 
   while true; do
     local snapshot
@@ -72,15 +75,28 @@ for x in a:
       esac
     done
 
+    [ "${n_work:-0}" -gt 0 ] && { ever_worked=1; quiet=0; announced=0; }
+
     if [ "${n_work:-0}" -eq 0 ]; then
-      summary=$(printf '%s\n' "$named" | awk -F'|' '{printf "%s: %s\n", $1, $2}')
-      _notify "fleet: all tasks settled" "$(printf '%s' "$summary" | head -c 400)" high white_check_mark
-      echo "all settled — notified"
-      printf '%s\n' "$summary" | sed 's/^/  /'
-      return 0
+      # Agents can read as idle for a moment right after dispatch, before they
+      # pick up the prompt. Require two consecutive quiet polls, and don't call
+      # it settled until we have actually seen work happen (or grace expires).
+      quiet=$((quiet+1))
+      if [ "$quiet" -ge 2 ] && { [ "$ever_worked" -eq 1 ] || [ "$elapsed" -ge "$grace" ]; }; then
+        if [ "$announced" -eq 0 ]; then
+          summary=$(printf '%s\n' "$named" | awk -F'|' '{printf "%s: %s\n", $1, $2}')
+          _notify "fleet: all tasks settled" "$(printf '%s' "$summary" | head -c 400)" high white_check_mark
+          echo ""
+          echo "all settled — notified"
+          printf '%s\n' "$summary" | sed 's/^/  /'
+          announced=1
+        fi
+        [ "$keep" -eq 0 ] && return 0
+      fi
     fi
 
     printf '\r  %s working, %s blocked, %s done   ' "${n_work:-0}" "${n_block:-0}" "${n_idle:-0}"
     sleep "$interval"
+    elapsed=$((elapsed+interval))
   done
 }

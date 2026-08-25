@@ -35,9 +35,11 @@ fleet — parallel agent dispatch over herdr
   fleet ready
       List only agents that are idle/blocked — i.e. waiting on you.
 
-  fleet babysit [--topic <ntfy-topic>] [--interval <secs>] [--test]
-      Keep the Mac awake, watch every dispatched agent, and push a phone
-      notification when one blocks or when all of them settle.
+  fleet babysit [--topic <t>] [--interval <s>] [--grace <s>] [--keep] [--test]
+      Keep the Mac awake, watch EVERY dispatched agent across all projects, and
+      push a phone notification when one blocks or when all of them settle.
+      One instance covers everything; you do not run it per project.
+      --keep stays up after settling so you can dispatch more during the day.
 
   fleet space <path> [--agent claude|cursor|none] [--label name]
       Create a workspace with the standard layout: tab 1 agent + app + shell,
