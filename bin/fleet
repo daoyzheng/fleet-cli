@@ -9,6 +9,8 @@ fleet — parallel agent dispatch over herdr
   fleet run <repo> <branch> <prompt> [-k claude|cursor] [-d <dir>]...
       Create a git worktree for <branch> off <repo>, start an agent in it,
       and submit <prompt>. Does not steal focus. Prints the agent name.
+      Claude agents get Remote Control enabled and named after the branch, so
+      they are reachable from the phone app; --no-remote opts out.
       -m/--mode sets the agent permission mode (auto, acceptEdits, plan, ...)
       for unattended runs; defaults to $FLEET_PERMISSION_MODE.
       -d/--add-dir grants the agent tool access to another directory
@@ -143,24 +145,25 @@ _submit_prompt() { # name, prompt -> 0 submitted, 1 not
 }
 
 cmd_run() {
-  local repo="" branch="" prompt="" kind="" pmode="${FLEET_PERMISSION_MODE:-}"
+  local repo="" branch="" prompt="" kind="" remote=1 pmode="${FLEET_PERMISSION_MODE:-}"
   local -a extra_dirs=()
   while [ $# -gt 0 ]; do
     case "$1" in
       -k|--kind) kind="$2"; shift 2 ;;
       -d|--add-dir) extra_dirs+=("${2/#\~/$HOME}"); shift 2 ;;
       -m|--mode) pmode="$2"; shift 2 ;;
+      --no-remote) remote=0; shift ;;
       *) if   [ -z "$repo" ];   then repo="$1"
          elif [ -z "$branch" ]; then branch="$1"
          else prompt="${prompt:+$prompt }$1"; fi; shift ;;
     esac
   done
   [ -n "$repo" ] && [ -n "$branch" ] && [ -n "$prompt" ] || { usage; exit 1; }
+  repo="${repo/#\~/$HOME}"
+  [ -d "$repo/.git" ] || { echo "not a git repo: $repo" >&2; exit 1; }
+  [ -n "$kind" ] || kind=$(_default_kind "$(cd "$repo" && pwd)")
   case "$kind" in claude|cursor|codex|gemini|copilot|opencode|amp|droid) ;;
     *) echo "fleet: unsupported --kind '$kind'" >&2; exit 1 ;; esac
-  repo="${repo/#\~/$HOME}"
-  [ -n "$kind" ] || kind=$(_default_kind "$(cd "$repo" 2>/dev/null && pwd || echo "$repo")")
-  [ -d "$repo/.git" ] || { echo "not a git repo: $repo" >&2; exit 1; }
 
   local created pane
   created=$(herdr worktree create --cwd "$repo" --branch "$branch" --no-focus --json)
@@ -186,6 +189,11 @@ cmd_run() {
     agent_args+=(--add-dir "$ed")
   done
   [ -n "$pmode" ] && agent_args+=(--permission-mode "$pmode")
+  # Name the Remote Control session after the branch so the phone app lists
+  # "CP-3762" rather than a topic summary. Claude Code only.
+  if [ "$remote" -eq 1 ] && [ "$kind" = "claude" ]; then
+    agent_args+=(--remote-control "$branch")
+  fi
   local started=0 attempt
   for attempt in 1 2 3; do
     if herdr agent start "$branch" --kind "$kind" --pane "$pane" --timeout 90000 \

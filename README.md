@@ -168,6 +168,11 @@ fleet run ~/src/api PROJ-51 "/ship ..." --mode auto
 fleet babysit
 ```
 
+Claude agents are dispatched with Remote Control enabled and **named after the
+branch**, so the phone app lists `CP-3762` and `PROJ-51` rather than auto-generated
+topic summaries — you can answer any blocked agent from your phone, not just one.
+`--no-remote` opts out. Cursor has no equivalent, so cursor agents are desk-only.
+
 `--mode` sets the agent's permission mode (`auto`, `acceptEdits`, `plan`, ...) so it
 doesn't stall on approval prompts; `FLEET_PERMISSION_MODE` sets a default.
 
