@@ -6,9 +6,11 @@ usage() {
   cat <<'USAGE'
 fleet — parallel agent dispatch over herdr
 
-  fleet run <repo> <branch> <prompt> [-k claude|cursor]
+  fleet run <repo> <branch> <prompt> [-k claude|cursor] [-d <dir>]...
       Create a git worktree for <branch> off <repo>, start an agent in it,
       and submit <prompt>. Does not steal focus. Prints the agent name.
+      -d/--add-dir gives the agent read access to another repo (repeatable) —
+      use it when the task spans repos that share a contract.
 
   fleet batch <file>
       Dispatch every line of a plan file. Format, one task per line:
@@ -80,9 +82,11 @@ jq_py() { python3 -c "import sys,json;$1" ; }
 
 cmd_run() {
   local repo="" branch="" prompt="" kind="claude"
+  local -a extra_dirs=()
   while [ $# -gt 0 ]; do
     case "$1" in
       -k|--kind) kind="$2"; shift 2 ;;
+      -d|--add-dir) extra_dirs+=("${2/#\~/$HOME}"); shift 2 ;;
       *) if   [ -z "$repo" ];   then repo="$1"
          elif [ -z "$branch" ]; then branch="$1"
          else prompt="${prompt:+$prompt }$1"; fi; shift ;;
@@ -101,7 +105,14 @@ cmd_run() {
   local ws
   ws=$(printf '%s' "$created" | jq_py "print(json.load(sys.stdin)['result']['workspace']['workspace_id'])")
 
-  if ! herdr agent start "$branch" --kind "$kind" --pane "$pane" --timeout 90000 >/dev/null; then
+  local -a agent_args=()
+  local ed
+  for ed in ${extra_dirs+"${extra_dirs[@]}"}; do
+    [ -d "$ed" ] || { echo "fleet: --add-dir path not found: $ed" >&2; herdr workspace close "$ws" >/dev/null 2>&1; return 1; }
+    agent_args+=(--add-dir "$ed")
+  done
+  if ! herdr agent start "$branch" --kind "$kind" --pane "$pane" --timeout 90000 \
+        ${agent_args+-- "${agent_args[@]}"} >/dev/null; then
     echo "fleet: '$kind' failed to start in $pane; removing the worktree just created" >&2
     herdr workspace close "$ws" >/dev/null 2>&1 || true
     return 1
@@ -110,7 +121,7 @@ cmd_run() {
     echo "fleet: agent '$branch' started but the prompt was not accepted; leaving it open" >&2
     return 1
   fi
-  echo "$branch  ($kind in $pane)"
+  echo "$branch  ($kind in $pane)${extra_dirs+ +$((${#extra_dirs[@]})) extra dir(s)}"
 }
 
 cmd_trees() {
