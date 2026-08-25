@@ -81,8 +81,18 @@ cmd_run() {
   created=$(herdr worktree create --cwd "$repo" --branch "$branch" --no-focus --json)
   pane=$(printf '%s' "$created" | jq_py "print(json.load(sys.stdin)['result']['root_pane']['pane_id'])")
 
-  herdr agent start "$branch" --kind "$kind" --pane "$pane" --timeout 90000 >/dev/null
-  herdr agent prompt "$branch" "$prompt" >/dev/null
+  local ws
+  ws=$(printf '%s' "$created" | jq_py "print(json.load(sys.stdin)['result']['workspace']['workspace_id'])")
+
+  if ! herdr agent start "$branch" --kind "$kind" --pane "$pane" --timeout 90000 >/dev/null; then
+    echo "fleet: '$kind' failed to start in $pane; removing the worktree just created" >&2
+    herdr workspace close "$ws" >/dev/null 2>&1 || true
+    return 1
+  fi
+  if ! herdr agent prompt "$branch" "$prompt" >/dev/null; then
+    echo "fleet: agent '$branch' started but the prompt was not accepted; leaving it open" >&2
+    return 1
+  fi
   echo "$branch  ($kind in $pane)"
 }
 
