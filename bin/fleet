@@ -82,6 +82,33 @@ need git; need python3; need herdr
 
 jq_py() { python3 -c "import sys,json;$1" ; }
 
+_agent_field() { # name, field -> value
+  herdr agent list 2>/dev/null | python3 -c "
+import sys,json
+try: a=json.load(sys.stdin)['result']['agents']
+except Exception: sys.exit()
+print(next((str(x.get('$2','')) for x in a if (x.get('name') or x['pane_id'])=='$1'), ''))"
+}
+
+_submit_prompt() { # name, prompt -> 0 submitted, 1 not
+  local name="$1" text="$2" seq0 i
+  seq0=$(_agent_field "$name" state_change_seq)
+
+  herdr agent prompt "$name" "$text" >/dev/null 2>&1 || true
+
+  # Some agent TUIs accept the typed text but drop the submit keypress, leaving
+  # it in the input box. Detect "nothing happened" and press Enter once.
+  for i in 1 2 3 4 5 6; do
+    case "$(_agent_field "$name" agent_status)" in
+      working|done) return 0 ;;
+    esac
+    [ "$(_agent_field "$name" state_change_seq)" != "$seq0" ] && return 0
+    [ "$i" = 2 ] && herdr agent send-keys "$name" Enter >/dev/null 2>&1
+    sleep 2
+  done
+  return 1
+}
+
 cmd_run() {
   local repo="" branch="" prompt="" kind="claude"
   local -a extra_dirs=()
@@ -107,20 +134,46 @@ cmd_run() {
   local ws
   ws=$(printf '%s' "$created" | jq_py "print(json.load(sys.stdin)['result']['workspace']['workspace_id'])")
 
+  # The worktree's shell may not have reached its prompt yet; agent start
+  # fails with agent_pane_busy if we race it.
+  local try
+  for try in 1 2 3 4 5 6 7 8; do
+    case "$(herdr pane process-info --pane "$pane" 2>/dev/null)" in
+      *'"agent"'*|*shell*|*zsh*|*bash*) break ;;
+    esac
+    sleep 1
+  done
+
   local -a agent_args=()
   local ed
   for ed in ${extra_dirs+"${extra_dirs[@]}"}; do
     [ -d "$ed" ] || { echo "fleet: --add-dir path not found: $ed" >&2; herdr workspace close "$ws" >/dev/null 2>&1; return 1; }
     agent_args+=(--add-dir "$ed")
   done
-  if ! herdr agent start "$branch" --kind "$kind" --pane "$pane" --timeout 90000 \
-        ${agent_args+-- "${agent_args[@]}"} >/dev/null; then
+  local started=0 attempt
+  for attempt in 1 2 3; do
+    if herdr agent start "$branch" --kind "$kind" --pane "$pane" --timeout 90000 \
+         ${agent_args+-- "${agent_args[@]}"} >/dev/null 2>&1; then
+      started=1; break
+    fi
+    sleep 3
+  done
+  if [ "$started" -eq 0 ]; then
     echo "fleet: '$kind' failed to start in $pane; removing the worktree just created" >&2
+    local wtpath
+    wtpath=$(printf '%s' "$created" | jq_py "print(json.load(sys.stdin)['result']['worktree']['path'])" 2>/dev/null || true)
     herdr workspace close "$ws" >/dev/null 2>&1 || true
+    if [ -n "$wtpath" ] && [ -d "$wtpath" ]; then
+      git -C "$repo" worktree remove --force "$wtpath" >/dev/null 2>&1 || rm -rf "$wtpath"
+      git -C "$repo" worktree prune >/dev/null 2>&1 || true
+    fi
     return 1
   fi
-  if ! herdr agent prompt "$branch" "$prompt" >/dev/null; then
-    echo "fleet: agent '$branch' started but the prompt was not accepted; leaving it open" >&2
+  sleep 2   # let the agent TUI finish painting before typing into it
+  if ! _submit_prompt "$branch" "$prompt"; then
+    echo "fleet: agent '$branch' started but did not begin working." >&2
+    echo "       The prompt may be sitting unsubmitted in its input box." >&2
+    echo "       Check with: fleet read $branch" >&2
     return 1
   fi
   echo "$branch  ($kind in $pane)${extra_dirs+ +$((${#extra_dirs[@]})) extra dir(s)}"
