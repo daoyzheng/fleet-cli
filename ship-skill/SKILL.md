@@ -123,17 +123,27 @@ Do not run this stage automatically. Stage 5 is where you stop and hand back.
 
 When the user says the change is good, integrate it:
 
+**Two gates must pass before anything is pushed. Both are hard requirements — if
+either fails, stop and fix it, and never bypass with `--no-verify`.**
+
 1. Confirm Stage 3 is still green against the current branch tip.
-2. Run `secret-scan <base-ref>` once more over the full branch.
-3. Commit (see **Commits and PRs** below) and push the branch.
-4. **Ask which branch the PR should target. Never assume, and never open a PR
+2. **Gate 1 — no test or debug code.** Run `secret-scan --strict <base-ref>` over the
+   full branch. Strict mode escalates warnings into blocking findings: focused or
+   skipped tests, stray `debugger`, `tempDisableSecurity` / `skipAuth`, and hardcoded
+   credentials in fixtures. It must exit 0. Paste the output.
+3. **Gate 2 — every change reviewed.** Stage 4's independent reviewer must have seen
+   the *full* diff as it now stands, not an earlier version. If the diff changed after
+   review, review it again. State what it found and how each finding was resolved or
+   why it was rejected.
+4. Commit (see **Commits and PRs** below) and push the branch.
+5. **Ask which branch the PR should target. Never assume, and never open a PR
    against `main` or whatever the repo calls its default branch.** The integration
    target is frequently a release, redesign, or develop branch, and a PR opened
    against the wrong base has to be closed and redone. Wait for the answer, then
    open the PR against that branch and fill in the repo's PR template.
-5. Stop the preview (`fleet preview --stop <name>`) and tell them the worktree can
+6. Stop the preview (`fleet preview --stop <name>`) and tell them the worktree can
    be removed once merged (`fleet trees --prune` cleans up afterwards).
-6. Report the PR URL.
+7. Report the PR URL.
 
 If the repo or the user has a preferred integration flow (squash, rebase, a release
 branch), follow that rather than assuming.
