@@ -1,0 +1,39 @@
+#compdef fleet
+
+_fleet() {
+  local -a cmds
+  cmds=(
+    'run:dispatch an agent in a new worktree'
+    'space:open a project workspace with the standard layout'
+    'preview:start a dev server on a free port'
+    'trees:list, prune, or remove worktrees'
+    'status:every agent and its state'
+    'ready:only agents waiting on you'
+    'watch:auto-refreshing status'
+    'wait:block until an agent settles'
+    'read:an agent'\''s recent output'
+    'batch:dispatch a plan file'
+    'help:full usage'
+  )
+  if (( CURRENT == 2 )); then
+    _describe 'command' cmds
+    return
+  fi
+  case "$words[2]" in
+    run|space|preview)
+      if (( CURRENT == 3 )); then _files -/; else
+        case "$words[2]" in
+          space)   _values 'option' '--agent' '--label' '--no-edit' '--no-git' ;;
+          preview) _values 'option' '--list' '--stop' '--stop-all' '--logs' '--dry-run' ;;
+          run)     _values 'option' '-k' '--kind' ;;
+        esac
+      fi ;;
+    trees)  _values 'option' '--linked' '--prune' '--rm' ;;
+    batch)  _files ;;
+    read|wait)
+      local -a agents
+      agents=(${(f)"$(herdr agent list 2>/dev/null | python3 -c 'import sys,json;[print(a.get("name") or a["pane_id"]) for a in json.load(sys.stdin)["result"]["agents"]]' 2>/dev/null)"})
+      _describe 'agent' agents ;;
+  esac
+}
+_fleet "$@"

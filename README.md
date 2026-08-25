@@ -50,13 +50,27 @@ cd fleet-cli && ./install.sh
 Installs `fleet` and `secret-scan` into `~/.local/bin` and the formatter into
 `~/.local/libexec`. Make sure `~/.local/bin` is on your `PATH`.
 
-To use the skills, symlink them where your agent looks:
+To use the skills, symlink them where your agent looks — so they stay versioned
+with this repo rather than drifting on one machine:
 
 ```bash
 ln -s "$PWD/ship-skill"    ~/.claude/skills/ship
 ln -s "$PWD/standup-skill" ~/.claude/skills/standup
 ln -s ~/.claude/skills/ship    ~/.cursor/skills/ship      # Cursor reads its own dir
 ln -s ~/.claude/skills/standup ~/.cursor/skills/standup
+```
+
+The skills are deliberately **generic**. Anything specific to your organisation —
+which forge you use, which paths are excluded, which repos share a contract —
+belongs in an `AGENTS.md` at the root of your projects directory, which both
+Claude Code and Cursor read automatically. Skill = process, `AGENTS.md` = org.
+
+Shell completions:
+
+```bash
+mkdir -p ~/.zsh/completions
+cp completions/_fleet ~/.zsh/completions/
+# in ~/.zshrc:  fpath=("$HOME/.zsh/completions" $fpath); autoload -Uz compinit && compinit
 ```
 
 ## Commands
@@ -70,10 +84,11 @@ ln -s ~/.claude/skills/standup ~/.cursor/skills/standup
 | `fleet watch` | `status`, refreshed every 5s |
 | `fleet wait <name>...` | Block until each agent settles — for scripting |
 | `fleet read <name> [lines]` | An agent's recent terminal output |
+| `fleet` (no args) | Dashboard: agents, previews, task worktrees |
 | `fleet space <path> [--agent kind]` | Scaffold a workspace: agent + app + shell, nvim tab, lazygit tab |
 | `fleet preview <path>` | Start that repo's dev server on a free port; print the localhost URL |
 | `fleet preview --list / --logs <n> / --stop <n> / --stop-all` | Manage running previews |
-| `fleet trees [--prune]` | Every git worktree under `$FLEET_ROOTS`; prune dead registrations |
+| `fleet trees [--linked\|--prune\|--rm <branch>]` | Worktrees with dirty/ahead/merged state and attached agents |
 
 ## Workspace layout
 

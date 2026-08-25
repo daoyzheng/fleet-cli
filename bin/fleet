@@ -38,9 +38,10 @@ fleet — parallel agent dispatch over herdr
       Start that repo/worktree's dev server on a free, deterministic port and
       print the localhost URL. Also: --list, --logs <name>, --stop <name>, --stop-all.
 
-  fleet trees [--prune]
-      List every git worktree under $FLEET_ROOTS (default ~/dev).
-      --prune removes worktree registrations whose directory is already gone.
+  fleet trees [--linked|--prune|--rm <branch>]
+      List worktrees with dirty/ahead/merged state and any agent attached.
+      --linked shows only task worktrees, --prune clears stale registrations,
+      --rm <branch> closes its workspace and removes the checkout.
 
 Examples:
   fleet run ~/src/api PROJ-42 "/ship fix the timezone rollover"
@@ -58,6 +59,9 @@ for c in "$SELF_DIR/fleet-fmt.py" "$SELF_DIR/../libexec/fleet-fmt.py" "$HOME/.lo
   [ -f "$c" ] && { FMT="$c"; break; }
 done
 : "${FMT:?fleet-fmt.py not found next to fleet or in ~/.local/libexec}"
+for c in "$SELF_DIR/fleet-trees.py" "$SELF_DIR/../libexec/fleet-trees.py" "$HOME/.local/libexec/fleet-trees.py"; do
+  [ -f "$c" ] && { TREES="$c"; break; }
+done
 for mod in fleet-preview.sh fleet-space.sh; do
   for c in "$SELF_DIR/$mod" "$SELF_DIR/../libexec/$mod" "$HOME/.local/libexec/$mod"; do
     [ -f "$c" ] && { . "$c"; break; }
@@ -110,28 +114,58 @@ cmd_run() {
 }
 
 cmd_trees() {
-  local prune="${1:-}"
-  local IFS_SAVE="$IFS"; IFS=':'
-  local roots=($FLEET_ROOTS); IFS="$IFS_SAVE"
-  local d r
+  local arg="${1:-}" target="${2:-}"
+  case "$arg" in
+    --prune)
+      local IFS_SAVE="$IFS"; IFS=':'; local roots=($FLEET_ROOTS); IFS="$IFS_SAVE"
+      for root in "${roots[@]}"; do
+        for d in "$root"/*/; do
+          [ -d "${d%/}/.git" ] || continue
+          git -C "${d%/}" worktree prune 2>/dev/null
+        done
+      done
+      echo "pruned stale registrations"
+      FLEET_ROOTS="$FLEET_ROOTS" python3 "$TREES" --linked
+      return 0 ;;
+    --rm)
+      [ -n "$target" ] || { echo "usage: fleet trees --rm <branch>" >&2; return 1; }
+      cmd_trees_rm "$target"; return $? ;;
+    --linked|"") FLEET_ROOTS="$FLEET_ROOTS" python3 "$TREES" $arg; return 0 ;;
+    *) echo "usage: fleet trees [--linked|--prune|--rm <branch>]" >&2; return 1 ;;
+  esac
+}
+
+cmd_trees_rm() {
+  local branch="$1" IFS_SAVE="$IFS"
+  IFS=':'; local roots=($FLEET_ROOTS); IFS="$IFS_SAVE"
+  local found=""
   for root in "${roots[@]}"; do
-  for d in "$root"/*/; do
-    r="${d%/}"
-    [ -d "$r/.git" ] || continue
-    local out; out=$(git -C "$r" worktree list --porcelain 2>/dev/null) || continue
-    printf '%s\n' "$out" | awk -v repo="$(basename "$r")" '
-      /^worktree /{path=$2}
-      /^branch /{br=$2; sub("refs/heads/","",br)}
-      /^detached/{br="(detached)"}
-      /^$/{if(path){printf "%-22s %-34s %s\n", repo, br, path; path=""; br=""}}
-      END{if(path) printf "%-22s %-34s %s\n", repo, br, path}'
-    if [ "$prune" = "--prune" ]; then
-      git -C "$r" worktree prune 2>/dev/null
-    fi
+    for d in "$root"/*/; do
+      local r="${d%/}"
+      [ -d "$r/.git" ] || continue
+      local p
+      p=$(git -C "$r" worktree list --porcelain 2>/dev/null | awk -v b="refs/heads/$branch" '
+        /^worktree /{path=$2} $0=="branch "b{print path}')
+      [ -n "$p" ] && { found="$p"; break 2; }
+    done
   done
-  done
-  [ "$prune" = "--prune" ] && echo "pruned stale registrations"
-  return 0
+  [ -n "$found" ] || { echo "fleet: no worktree on branch '$branch'" >&2; return 1; }
+
+  if [ -n "$(git -C "$found" status --porcelain 2>/dev/null)" ]; then
+    echo "fleet: '$branch' has uncommitted changes at $found" >&2
+    echo "       commit or discard them first, or use: git worktree remove --force \"$found\"" >&2
+    return 1
+  fi
+  local ws
+  ws=$(herdr workspace list 2>/dev/null | python3 -c "
+import sys,json
+try: ws=json.load(sys.stdin)['result']['workspaces']
+except Exception: ws=[]
+print(next((w['workspace_id'] for w in ws if w.get('worktree',{}).get('checkout_path')=='$found'), ''))" 2>/dev/null)
+  [ -n "$ws" ] && { herdr workspace close "$ws" >/dev/null 2>&1; echo "  closed workspace $ws"; }
+  git -C "$found" worktree remove "$found" 2>/dev/null || git worktree remove "$found" 2>/dev/null
+  echo "removed worktree $found"
+  echo "  branch '$branch' still exists — delete with: git -C <repo> branch -d $branch"
 }
 
 cmd_status() {
@@ -157,6 +191,17 @@ cmd_batch() {
   echo "dispatched $n task(s)"
 }
 
+cmd_dash() {
+  printf '\n\033[1mAGENTS\033[0m\n'
+  cmd_status | sed 's/^/  /'
+  printf '\n\033[1mPREVIEWS\033[0m\n'
+  cmd_preview --list
+  printf '\n\033[1mTASK WORKTREES\033[0m\n'
+  FLEET_ROOTS="$FLEET_ROOTS" python3 "$TREES" --linked | sed 's/^/  /'
+  printf '\n\033[2m  fleet run <repo> <branch> "<prompt>"   dispatch      fleet ready    what needs you\n'
+  printf '  fleet space <path>                     open a project      fleet help     everything else\033[0m\n\n'
+}
+
 case "${1:-}" in
   run)    shift; cmd_run "$@" ;;
   batch)  shift; cmd_batch "$@" ;;
@@ -168,6 +213,7 @@ case "${1:-}" in
   watch)  while true; do clear; date "+%H:%M:%S"; cmd_status; sleep 5; done ;;
   wait)   shift; for a in "$@"; do echo "waiting: $a"; herdr agent wait "$a" >/dev/null; echo "  done: $a"; done ;;
   read)   shift; herdr agent read "$1" --lines "${2:-120}" --format text ;;
-  ""|-h|--help) usage ;;
+  ""|dash) cmd_dash ;;
+  help|-h|--help) usage ;;
   *) usage; exit 1 ;;
 esac
