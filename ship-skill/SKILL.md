@@ -64,9 +64,13 @@ above it in the same response.
 
 Get a second pair of eyes that did **not** write the code. In order of preference:
 
-1. Dispatch a review subagent with the diff and the task description, prompted to
-   **find defects, not to approve**. Ask specifically for: logic errors, unhandled
-   states, broken contracts with other repos, and anything the tests don't cover.
+1. **Dispatch a review subagent** (Claude Code: the Agent tool with
+   `subagent_type: "feature-dev:code-reviewer"`, or a general-purpose agent where
+   that isn't available). Give it the diff and the task description, and prompt it
+   to **find defects, not to approve**. Ask specifically for: logic errors,
+   unhandled states, broken contracts with other repos, and anything the tests
+   don't cover. This is a required step, not an optional one — the agent that wrote
+   the code does not review it.
 2. For risky changes (auth, money, migrations, anything user-facing at scale), also
    get a cross-model read:
    `git diff <base> | cursor-agent -p --model gpt-5 "Review this diff. Report only real bugs."`
@@ -92,7 +96,14 @@ The commands you ran and their real output. State what is NOT covered by
 automated tests.
 
 ## Test this yourself
-The section the user actually needs. Be specific and physical:
+**Start the app first and give them a working URL.** Run
+`fleet preview <worktree-path>` and paste the `http://localhost:<port>` it prints.
+It picks a free port, so it won't collide with anything already running, and it
+works from a worktree. If the project has no dev server (a .NET service, a
+library), say so and give the equivalent — the test command, or the endpoint to
+curl.
+
+Then be specific and physical:
 - Exact URL / route / screen to open, and how to get there
 - The precise click path or input, including any data conditions
   ("a client with alternatives holdings", "an entry with no fr-CA localization")
@@ -105,6 +116,23 @@ Number them. If there is genuinely nothing to check by hand, say so.
 What could still break, what you deliberately left out of scope, what you'd
 want a second opinion on. Be honest here — this is where an omission costs most.
 ```
+
+## Stage 6 — Finish (only when the user says so)
+
+Do not run this stage automatically. Stage 5 is where you stop and hand back.
+
+When the user says the change is good, integrate it:
+
+1. Confirm Stage 3 is still green against the current branch tip.
+2. Run `secret-scan <base-ref>` once more over the full branch.
+3. Commit (see **Commits and PRs** below), push the branch, open the PR against the
+   right forge, and fill in the repo's PR template.
+4. Stop the preview (`fleet preview --stop <name>`) and tell them the worktree can
+   be removed once merged (`fleet trees --prune` cleans up afterwards).
+5. Report the PR URL.
+
+If the repo or the user has a preferred integration flow (squash, rebase, a release
+branch), follow that rather than assuming.
 
 ## Commits and PRs
 

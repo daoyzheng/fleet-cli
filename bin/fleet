@@ -30,6 +30,10 @@ fleet — parallel agent dispatch over herdr
   fleet ready
       List only agents that are idle/blocked — i.e. waiting on you.
 
+  fleet preview <path> [--dry-run]
+      Start that repo/worktree's dev server on a free, deterministic port and
+      print the localhost URL. Also: --list, --logs <name>, --stop <name>, --stop-all.
+
   fleet trees [--prune]
       List every git worktree under $FLEET_ROOTS (default ~/dev).
       --prune removes worktree registrations whose directory is already gone.
@@ -50,6 +54,9 @@ for c in "$SELF_DIR/fleet-fmt.py" "$SELF_DIR/../libexec/fleet-fmt.py" "$HOME/.lo
   [ -f "$c" ] && { FMT="$c"; break; }
 done
 : "${FMT:?fleet-fmt.py not found next to fleet or in ~/.local/libexec}"
+for c in "$SELF_DIR/fleet-preview.sh" "$SELF_DIR/../libexec/fleet-preview.sh" "$HOME/.local/libexec/fleet-preview.sh"; do
+  [ -f "$c" ] && { . "$c"; break; }
+done
 
 # Roots searched by `fleet trees`. Override with FLEET_ROOTS (colon-separated),
 # or set it in ~/.config/fleet/config.
@@ -150,6 +157,7 @@ case "${1:-}" in
   status) cmd_status ;;
   ready)  cmd_ready ;;
   trees)  shift; cmd_trees "${1:-}" ;;
+  preview) shift; cmd_preview "$@" ;;
   watch)  while true; do clear; date "+%H:%M:%S"; cmd_status; sleep 5; done ;;
   wait)   shift; for a in "$@"; do echo "waiting: $a"; herdr agent wait "$a" >/dev/null; echo "  done: $a"; done ;;
   read)   shift; herdr agent read "$1" --lines "${2:-120}" --format text ;;

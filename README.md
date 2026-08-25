@@ -70,7 +70,29 @@ ln -s ~/.claude/skills/standup ~/.cursor/skills/standup
 | `fleet watch` | `status`, refreshed every 5s |
 | `fleet wait <name>...` | Block until each agent settles — for scripting |
 | `fleet read <name> [lines]` | An agent's recent terminal output |
+| `fleet preview <path>` | Start that repo's dev server on a free port; print the localhost URL |
+| `fleet preview --list / --logs <n> / --stop <n> / --stop-all` | Manage running previews |
 | `fleet trees [--prune]` | Every git worktree under `$FLEET_ROOTS`; prune dead registrations |
+
+## Previewing a worktree
+
+Agents work in worktrees, so several checkouts of the same project can want the same
+dev-server port. `fleet preview` picks a free port derived from the worktree name,
+starts the dev server in its own process group, and prints the URL:
+
+```bash
+$ fleet preview ~/.herdr/worktrees/web/PROJ-42
+web-PROJ-42  http://localhost:3361  (nuxt, pid 91943)
+  logs: fleet preview --logs web-PROJ-42
+
+$ fleet preview --list
+$ fleet preview --stop web-PROJ-42
+```
+
+Detects Nuxt, Strapi, Quasar, and generic `npm/yarn/pnpm run dev` projects, using
+the repo's own lockfile to pick the package manager. `--dry-run` prints the command
+without running it. Stopping kills the whole process group, then anything still
+holding the port.
 
 ## Configuration
 
