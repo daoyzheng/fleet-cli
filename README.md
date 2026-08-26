@@ -201,6 +201,20 @@ can confirm delivery before relying on it.
 Topics are public to anyone who knows the name — use something unguessable, and
 remember agent names travel in the notification body.
 
+## Agent names vs branch names
+
+herdr agent names must be lowercase `[a-z0-9_-]`, 1–32 characters. Branch names
+routinely are not — `CP-3762`, `feature/Foo`. `fleet run` derives a valid agent name
+from the branch and tells you when they differ:
+
+```
+probe-billingservice  (branch probe-billingService, cursor in w18:p1)
+```
+
+The branch keeps its real name; the agent name is what you use with `fleet read`,
+`fleet handoff`, and phone replies — and the relay matches case-insensitively, so
+`CP-3762: ...` finds `cp-3762`.
+
 ## Configuration
 
 `~/.config/fleet/config` is sourced if present:

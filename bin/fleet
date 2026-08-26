@@ -165,6 +165,13 @@ cmd_run() {
   case "$kind" in claude|cursor|codex|gemini|copilot|opencode|amp|droid) ;;
     *) echo "fleet: unsupported --kind '$kind'" >&2; exit 1 ;; esac
 
+  # herdr agent names are lowercase [a-z0-9_-], 1-32 chars, starting with a
+  # letter. Branch names are not (CP-3762, feature/Foo), so derive a safe name
+  # and keep the branch itself untouched.
+  local aname
+  aname=$(printf '%s' "$branch" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]/-/g' | cut -c1-32)
+  case "$aname" in [a-z]*) ;; *) aname="a-$aname"; aname=$(printf '%s' "$aname" | cut -c1-32) ;; esac
+
   local created pane
   created=$(herdr worktree create --cwd "$repo" --branch "$branch" --no-focus --json)
   pane=$(printf '%s' "$created" | jq_py "print(json.load(sys.stdin)['result']['root_pane']['pane_id'])")
@@ -175,7 +182,7 @@ cmd_run() {
   # The worktree's shell may not have reached its prompt yet; agent start
   # fails with agent_pane_busy if we race it.
   local try
-  for try in 1 2 3 4 5 6 7 8; do
+  for try in $(seq 1 25); do
     case "$(herdr pane process-info --pane "$pane" 2>/dev/null)" in
       *'"agent"'*|*shell*|*zsh*|*bash*) break ;;
     esac
@@ -206,15 +213,15 @@ cmd_run() {
   # Name the Remote Control session after the branch so the phone app lists
   # "CP-3762" rather than a topic summary. Claude Code only.
   if [ "$remote" -eq 1 ] && [ "$kind" = "claude" ]; then
-    agent_args+=(--remote-control "$branch")
+    agent_args+=(--remote-control "$aname")
   fi
   local started=0 attempt
-  for attempt in 1 2 3; do
-    if herdr agent start "$branch" --kind "$kind" --pane "$pane" --timeout 90000 \
+  for attempt in 1 2 3 4; do
+    if herdr agent start "$aname" --kind "$kind" --pane "$pane" --timeout 90000 \
          ${agent_args+-- "${agent_args[@]}"} >/dev/null 2>&1; then
       started=1; break
     fi
-    sleep 3
+    sleep $((attempt * 3))
   done
   if [ "$started" -eq 0 ]; then
     echo "fleet: '$kind' failed to start in $pane; removing the worktree just created" >&2
@@ -228,13 +235,17 @@ cmd_run() {
     return 1
   fi
   sleep 2   # let the agent TUI finish painting before typing into it
-  if ! _submit_prompt "$branch" "$prompt"; then
-    echo "fleet: agent '$branch' started but did not begin working." >&2
+  if ! _submit_prompt "$aname" "$prompt"; then
+    echo "fleet: agent '$aname' started but did not begin working." >&2
     echo "       The prompt may be sitting unsubmitted in its input box." >&2
-    echo "       Check with: fleet read $branch" >&2
+    echo "       Check with: fleet read $aname" >&2
     return 1
   fi
-  echo "$branch  ($kind in $pane)${extra_dirs+ +$((${#extra_dirs[@]})) extra dir(s)}"
+  if [ "$aname" = "$branch" ]; then
+    echo "$branch  ($kind in $pane)${extra_dirs+ +$((${#extra_dirs[@]})) extra dir(s)}"
+  else
+    echo "$aname  (branch $branch, $kind in $pane)${extra_dirs+ +$((${#extra_dirs[@]})) extra dir(s)}"
+  fi
 }
 
 cmd_trees() {
@@ -309,8 +320,9 @@ cmd_batch() {
     prompt="$(echo "${prompt:-}" | sed -e 's/^ *//' -e 's/ *$//')"
     case "$repo" in ''|\#*) continue ;; esac
     [ -n "$branch" ] && [ -n "$prompt" ] || { echo "skipping malformed line: $repo" >&2; continue; }
-    cmd_run "$repo" "$branch" "$prompt"
+    cmd_run "$repo" "$branch" "$prompt" || true
     n=$((n+1))
+    sleep 5
   done < "$file"
   echo "dispatched $n task(s)"
 }
