@@ -102,8 +102,22 @@ done
 [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/fleet/config" ] && . "${XDG_CONFIG_HOME:-$HOME/.config}/fleet/config"
 FLEET_ROOTS="${FLEET_ROOTS:-$HOME/dev}"
 
+# GUI launchers (SwiftBar, Raycast, launchd) start with a minimal PATH that
+# omits ~/.local/bin and Homebrew, so find our own tools regardless.
+for d in "$HOME/.local/bin" /opt/homebrew/bin /usr/local/bin; do
+  case ":$PATH:" in *":$d:"*) ;; *) [ -d "$d" ] && PATH="$d:$PATH" ;; esac
+done
+export PATH
+
 need() { command -v "$1" >/dev/null 2>&1 || { echo "fleet: missing dependency '$1'" >&2; exit 127; }; }
-need git; need python3; need herdr
+# Only the subcommands that actually talk to herdr require it. babysit's
+# --toggle/--status are pure launchctl and must work from a menu bar click.
+need git; need python3
+case "${1:-}" in
+  babysit)
+    case " $* " in *" --toggle "*|*" --status "*|*" --stop "*) ;; *) need herdr ;; esac ;;
+  *) need herdr ;;
+esac
 
 jq_py() { python3 -c "import sys,json;$1" ; }
 
