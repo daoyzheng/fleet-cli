@@ -274,7 +274,7 @@ Addressing is designed for typing on a phone:
 | `use a separate tab` | the agent that last asked you something, or the only one running |
 | `2: use a separate tab` | agent #2 from the roster |
 | `nav: use a separate tab` | the only agent whose name contains `nav` |
-| `?` (or `who`, `list`) | nothing — pushes back the numbered roster |
+| `?` (or `who`, `list`, `status`) | nothing — pushes back the numbered roster with each agent's state |
 
 Roster numbers are stable (agents sorted by name) so the number you read in a push is
 the number you reply with. A bare message that could go to several agents is not

@@ -110,15 +110,23 @@ if last: print('LAST	'+last)
         # "?" or "who" -> push the current roster instead of prompting anyone
         case "$trimmed" in
           "?"|who|list|agents|status)
-            roster=""; local i=0 rn2
+            roster=""; local i=0 rn2 rst rmark
             while read -r rn2; do
               [ -n "$rn2" ] || continue
               i=$((i+1))
-              roster="${roster}${i}. ${rn2} — $(_agent_gist "$rn2")
+              rst=$(_all_agents | awk -F'|' -v n="$rn2" '$1==n{print $2}')
+              case "$rst" in
+                working) rmark="running" ;;
+                blocked) rmark="NEEDS YOU" ;;
+                *)       rmark="finished" ;;
+              esac
+              roster="${roster}${i}. ${rn2} — ${rmark}
+   $(_agent_gist "$rn2")
 "
             done <<EOR
 $(_agent_names)
 EOR
+            [ -n "$roster" ] || roster="nothing dispatched"
             _notify "🗒 agents" "${roster:-nothing dispatched}" default clipboard
             echo "  [relay] roster sent"
             continue ;;
