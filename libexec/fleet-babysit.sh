@@ -30,7 +30,7 @@ for x in a:
 }
 
 _agent_gist() { # name [socket] -> "[kind] what the agent is on about"
-  HERDR_SOCKET_PATH="${2:-$HERDR_SOCKET_PATH}" herdr agent list 2>/dev/null | python3 -c "
+  HERDR_SOCKET_PATH="${2:-${HERDR_SOCKET_PATH:-}}" herdr agent list 2>/dev/null | python3 -c "
 import sys,json,re
 try: a=json.load(sys.stdin)['result']['agents']
 except Exception: sys.exit()
@@ -43,7 +43,7 @@ print((f'[{k}] ' if k else '')+t[:100])" 2>/dev/null
 }
 
 _agent_ask() { # name [socket] -> what the agent is actually asking, with context
-  local name="$1" sock="${2:-$HERDR_SOCKET_PATH}" cwd txt
+  local name="$1" sock="${2:-${HERDR_SOCKET_PATH:-}}" cwd txt
 
   # Preferred: the agent's own last message from its session transcript.
   # Cleaner and far more complete than scraping the terminal.

@@ -173,8 +173,10 @@ branch**, so the phone app lists `CP-3762` and `PROJ-51` rather than auto-genera
 topic summaries — you can answer any blocked agent from your phone, not just one.
 `--no-remote` opts out. Cursor has no equivalent, so cursor agents are desk-only.
 
-`--mode` sets the agent's permission mode (`auto`, `acceptEdits`, `plan`, ...) so it
-doesn't stall on approval prompts; `FLEET_PERMISSION_MODE` sets a default.
+`--mode` sets the agent's permission mode so it doesn't stall on approval prompts;
+`FLEET_PERMISSION_MODE` sets a default. Each CLI spells this differently and fleet
+translates: Claude/Codex get `--permission-mode`, Cursor gets `--auto-review --trust`
+for `auto` or `--force --trust` for the more permissive modes.
 
 `fleet babysit` holds `caffeinate` for as long as it runs, polls every 30s, and pushes
 via [ntfy.sh](https://ntfy.sh) — once per agent that becomes **blocked** (it needs you

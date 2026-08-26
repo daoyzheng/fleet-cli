@@ -188,7 +188,21 @@ cmd_run() {
     [ -d "$ed" ] || { echo "fleet: --add-dir path not found: $ed" >&2; herdr workspace close "$ws" >/dev/null 2>&1; return 1; }
     agent_args+=(--add-dir "$ed")
   done
-  [ -n "$pmode" ] && agent_args+=(--permission-mode "$pmode")
+  # Unattended permissions. Every agent CLI spells this differently.
+  if [ -n "$pmode" ]; then
+    case "$kind" in
+      claude|codex) agent_args+=(--permission-mode "$pmode") ;;
+      cursor)
+        # cursor: --auto-review is the classifier-backed equivalent of "auto";
+        # anything more permissive maps to --force.
+        case "$pmode" in
+          auto)                      agent_args+=(--auto-review --trust) ;;
+          acceptEdits|bypassPermissions|dontAsk) agent_args+=(--force --trust) ;;
+          plan)                      agent_args+=(--plan) ;;
+        esac ;;
+      *) : ;;   # unknown kind: pass nothing rather than a flag it will reject
+    esac
+  fi
   # Name the Remote Control session after the branch so the phone app lists
   # "CP-3762" rather than a topic summary. Claude Code only.
   if [ "$remote" -eq 1 ] && [ "$kind" = "claude" ]; then
