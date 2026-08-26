@@ -184,7 +184,7 @@ Notifications are situation-specific and carry context pulled from the agent its
 
 | Situation | Push |
 |---|---|
-| An agent blocks on a question | `❓ <name> needs an answer` + what it is asking |
+| An agent blocks on a question | `❓ <name> needs an answer`, the task topic, and the agent's **own last message** (up to ~1.4KB) so you have the reasoning, options and trade-offs in hand |
 | All settled, none blocked | `✅ ready for your review` + one line per agent |
 | All settled, some blocked | `⚠️ fleet done, N still need you` |
 

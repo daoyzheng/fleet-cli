@@ -42,11 +42,34 @@ k=m.get('agent','')
 print((f'[{k}] ' if k else '')+t[:100])" 2>/dev/null
 }
 
-_agent_ask() { # name [socket] -> the question an agent is blocked on
-  HERDR_SOCKET_PATH="${2:-$HERDR_SOCKET_PATH}" herdr agent read "$1" --source visible --lines 40 --format text 2>/dev/null \
-    | sed 's/\x1b\[[0-9;]*m//g' \
-    | grep -vE '^\s*$|^[─╭╰│╮╯]|^\s*❯|shift\+tab|for shortcuts|auto mode|manual mode' \
-    | tail -4 | tr '\n' ' ' | cut -c1-180
+_agent_ask() { # name [socket] -> what the agent is actually asking, with context
+  local name="$1" sock="${2:-$HERDR_SOCKET_PATH}" cwd txt
+
+  # Preferred: the agent's own last message from its session transcript.
+  # Cleaner and far more complete than scraping the terminal.
+  cwd=$(HERDR_SOCKET_PATH="$sock" herdr agent list 2>/dev/null | python3 -c "
+import sys,json
+try: a=json.load(sys.stdin)['result']['agents']
+except Exception: sys.exit()
+print(next((x['cwd'] for x in a if (x.get('name') or x['pane_id'])=='$name'), ''))" 2>/dev/null)
+
+  if [ -n "$cwd" ] && [ -f "$HOME/.local/libexec/fleet-handoff.py" ]; then
+    txt=$(python3 "$HOME/.local/libexec/fleet-handoff.py" "$cwd" 1 2>/dev/null \
+      | sed 's/^#\{1,6\} //; s/\*\*//g; s/`//g' \
+      | grep -v '^[[:space:]]*$' \
+      | tail -24)
+  fi
+
+  # Fallback (Cursor and anything without a transcript): scrape the pane.
+  if [ -z "$txt" ]; then
+    txt=$(HERDR_SOCKET_PATH="$sock" herdr agent read "$name" --source visible --lines 60 --format text 2>/dev/null \
+      | sed 's/\x1b\[[0-9;]*m//g' \
+      | grep -vE '^\s*$|^[─╭╰│╮╯]|^\s*❯|shift\+tab|for shortcuts|auto mode|manual mode|↓$' \
+      | tail -14)
+  fi
+
+  # ntfy caps a message around 4KB; keep well under and end on a whole line.
+  printf '%s' "$txt" | tail -c 1400 | sed '1d'
 }
 
 
