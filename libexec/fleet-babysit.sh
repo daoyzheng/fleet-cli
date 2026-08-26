@@ -56,7 +56,12 @@ _relay_state() { echo "${XDG_STATE_HOME:-$HOME/.local/state}/fleet/relay-since";
 _relay_poll() { # read new messages on the inbound topic and feed them to agents
   local topic="${FLEET_NTFY_TOPIC:-}-in" st since msgs
   [ -n "${FLEET_NTFY_TOPIC:-}" ] || return 0
-  st=$(_relay_state); since=$(cat "$st" 2>/dev/null || echo "all")
+  st=$(_relay_state)
+  if [ ! -f "$st" ]; then
+    # first run: start from now so a restart never replays the day's messages
+    printf '%s' "$(date +%s)" > "$st"
+  fi
+  since=$(cat "$st" 2>/dev/null || date +%s)
 
   msgs=$(curl -s -m 20 "https://ntfy.sh/${topic}/json?poll=1&since=${since}" 2>/dev/null | python3 -c "
 import sys,json
@@ -80,11 +85,52 @@ if last: print('LAST	'+last)
     case "$kind" in
       LAST) printf '%s' "$rest" > "$st" ;;
       MSG)
-        agent="${rest%%:*}"; text="${rest#*:}"
+        local trimmed roster names n_names
+        trimmed="$(printf '%s' "$rest" | sed 's/^ *//;s/ *$//')"
+
+        # "?" or "who" -> push the current roster instead of prompting anyone
+        case "$trimmed" in
+          "?"|who|list|agents|status)
+            roster=""
+            while IFS='|' read -r rn rs rk rsess; do
+              [ -n "$rn" ] || continue
+              roster="${roster}${rn} [${rs}] $(_agent_gist "$rn")
+"
+            done <<EOR
+$(_all_agents)
+EOR
+            _notify "🗒 agents" "${roster:-nothing dispatched}" default clipboard
+            echo "  [relay] roster sent"
+            continue ;;
+        esac
+
+        agent="${trimmed%%:*}"; text="${trimmed#*:}"
         agent="$(printf '%s' "$agent" | tr -d '[:space:]')"
+        # a "name" this long is not a name — treat the whole thing as a bare message
+        [ "${#agent}" -gt 40 ] && agent="$trimmed"
         text="$(printf '%s' "$text" | sed 's/^ *//')"
-        if [ -z "$agent" ] || [ "$agent" = "$rest" ] || [ -z "$text" ]; then
-          echo "  [relay] ignored (expected '<agent>: message'): ${rest:0:60}"
+
+        # No "agent:" prefix? Route it for them.
+        if [ "$agent" = "$trimmed" ] || [ -z "$text" ]; then
+          text="$trimmed"
+          names=$(_all_agents | awk -F'|' '{print $1}')
+          n_names=$(printf '%s\n' "$names" | grep -c . || true)
+          agent=$(cat "${XDG_STATE_HOME:-$HOME/.local/state}/fleet/last-asked" 2>/dev/null || true)
+          # the agent we last alerted about, if it still exists
+          if [ -z "$agent" ] || ! printf '%s\n' "$names" | grep -qx "$agent"; then
+            if [ "${n_names:-0}" -eq 1 ]; then
+              agent="$(printf '%s' "$names" | tr -d '[:space:]')"
+            else
+              roster=$(printf '%s\n' "$names" | sed 's/^/• /' | tr '\n' ' ')
+              _notify "which agent?" "Prefix with a name: $roster" high question
+              echo "  [relay] ambiguous, asked which agent"
+              continue
+            fi
+          fi
+          echo "  [relay] no prefix — routing to '$agent'"
+        fi
+        if [ -z "$agent" ] || [ -z "$text" ]; then
+          echo "  [relay] ignored: ${rest:0:60}"
           continue
         fi
         # only ever target an agent that actually exists
@@ -211,6 +257,7 @@ cmd_babysit() {
            _notify "❓ $a needs an answer" "${gist:+$gist
 }${ask:-Blocked and waiting for input.}" high question
            seen_blocked="$seen_blocked $a"
+           printf '%s' "$a" > "${XDG_STATE_HOME:-$HOME/.local/state}/fleet/last-asked"
            echo "  [blocked] $a — notified" ;;
       esac
     done
