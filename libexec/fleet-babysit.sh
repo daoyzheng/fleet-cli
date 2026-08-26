@@ -71,7 +71,13 @@ print(next((x['cwd'] for x in a if (x.get('name') or x['pane_id'])=='$name'), ''
   fi
 
   # ntfy caps a message around 4KB; keep well under and end on a whole line.
-  printf '%s' "$txt" | tail -c 1400 | sed '1d'
+  # Trim to what ntfy will carry. Only drop the leading line when we actually
+  # truncated — otherwise a short message loses its first (often only) line.
+  if [ "$(printf '%s' "$txt" | wc -c | tr -d ' ')" -gt 1400 ]; then
+    printf '%s' "$txt" | tail -c 1400 | sed '1d'
+  else
+    printf '%s' "$txt"
+  fi
   return 0
 }
 
@@ -162,6 +168,21 @@ EOR
             [ -n "$roster" ] || roster="nothing dispatched"
             _notify "🗒 agents" "${roster:-nothing dispatched}" default clipboard
             echo "  [relay] roster sent"
+            continue ;;
+        esac
+
+        # A bare number is a request for that agent's report, not a message.
+        case "$trimmed" in
+          ''|*[!0-9]*) ;;
+          *)
+            local pick; pick=$(_resolve_agent "$trimmed" || true)
+            if [ -n "$pick" ]; then
+              _notify "📄 $pick" "$(_agent_gist "$pick")
+$(_agent_ask "$pick")" default page_facing_up
+              echo "  [relay] summary sent for $pick"
+            else
+              _notify "no agent #$trimmed" "Send ? for the list." default question
+            fi
             continue ;;
         esac
 
@@ -366,10 +387,21 @@ cmd_babysit() {
           done <<EOS
 $named
 EOS
-          if [ "${n_block:-0}" -gt 0 ]; then
-            _notify "⚠️ fleet done, $n_block still need you" "$(printf '%s' "$summary" | head -c 380)" high warning
+          local n_named body
+          n_named=$(printf '%s\n' "$named" | grep -c . || true)
+          if [ "${n_named:-0}" -eq 1 ]; then
+            # one agent: send its actual report, not just its name
+            local only; only=$(printf '%s\n' "$named" | awk -F'|' 'NR==1{print $1}')
+            body="$(_agent_gist "$only")
+$(_agent_ask "$only")"
           else
-            _notify "✅ ready for your review" "$(printf '%s' "$summary" | head -c 380)" high white_check_mark
+            body="$summary
+Send a number for that one's summary."
+          fi
+          if [ "${n_block:-0}" -gt 0 ]; then
+            _notify "⚠️ fleet done, $n_block still need you" "$(printf '%s' "$body" | tail -c 1500)" high warning
+          else
+            _notify "✅ ready for your review" "$(printf '%s' "$body" | tail -c 1500)" high white_check_mark
           fi
           echo ""
           echo "all settled — notified"

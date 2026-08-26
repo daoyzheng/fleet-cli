@@ -188,7 +188,7 @@ Notifications are situation-specific and carry context pulled from the agent its
 | Situation | Push |
 |---|---|
 | An agent blocks on a question | `❓ <name> needs an answer`, the task topic, and the agent's **own last message** (up to ~1.4KB) so you have the reasoning, options and trade-offs in hand |
-| All settled, none blocked | `✅ ready for your review` + one line per agent |
+| All settled, none blocked | `✅ ready for your review`. One agent → its actual report. Several → a line each, and you send a number to get that one's report |
 | All settled, some blocked | `⚠️ fleet done, N still need you` |
 
 **One instance watches every agent across every project** — it is not per-repo. It
@@ -306,6 +306,7 @@ Addressing is designed for typing on a phone:
 | `use a separate tab` | the agent that last asked you something, or the only one running |
 | `2: use a separate tab` | agent #2 from the roster |
 | `nav: use a separate tab` | the only agent whose name contains `nav` |
+| `3` (a bare number) | nothing — pushes back that agent's full report |
 | `?` (or `who`, `list`, `status`) | nothing — pushes back the numbered roster with each agent's state |
 
 Roster numbers are stable (agents sorted by name) so the number you read in a push is
