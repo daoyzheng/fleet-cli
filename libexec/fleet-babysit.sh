@@ -30,7 +30,8 @@ for x in a:
 }
 
 _agent_gist() { # name [socket] -> "[kind] what the agent is on about"
-  HERDR_SOCKET_PATH="${2:-${HERDR_SOCKET_PATH:-}}" herdr agent list 2>/dev/null | python3 -c "
+  local sk="${2:-${HERDR_SOCKET_PATH:-}}"
+  { [ -n "$sk" ] && HERDR_SOCKET_PATH="$sk" herdr agent list 2>/dev/null || herdr agent list 2>/dev/null; } | python3 -c "
 import sys,json,re
 try: a=json.load(sys.stdin)['result']['agents']
 except Exception: sys.exit()
@@ -39,7 +40,8 @@ if not m: sys.exit()
 t=m.get('terminal_title_stripped') or m.get('terminal_title','')
 t=re.sub(r'^[^A-Za-z0-9]*','',t).strip()
 k=m.get('agent','')
-print((f'[{k}] ' if k else '')+t[:100])" 2>/dev/null
+print((f'[{k}] ' if k else '')+t[:100])" 2>/dev/null || true
+  return 0
 }
 
 _agent_ask() { # name [socket] -> what the agent is actually asking, with context
@@ -47,7 +49,7 @@ _agent_ask() { # name [socket] -> what the agent is actually asking, with contex
 
   # Preferred: the agent's own last message from its session transcript.
   # Cleaner and far more complete than scraping the terminal.
-  cwd=$(HERDR_SOCKET_PATH="$sock" herdr agent list 2>/dev/null | python3 -c "
+  cwd=$({ [ -n "$sock" ] && HERDR_SOCKET_PATH="$sock" herdr agent list 2>/dev/null || herdr agent list 2>/dev/null; } | python3 -c "
 import sys,json
 try: a=json.load(sys.stdin)['result']['agents']
 except Exception: sys.exit()
@@ -62,7 +64,7 @@ print(next((x['cwd'] for x in a if (x.get('name') or x['pane_id'])=='$name'), ''
 
   # Fallback (Cursor and anything without a transcript): scrape the pane.
   if [ -z "$txt" ]; then
-    txt=$(HERDR_SOCKET_PATH="$sock" herdr agent read "$name" --source visible --lines 60 --format text 2>/dev/null \
+    txt=$({ [ -n "$sock" ] && HERDR_SOCKET_PATH="$sock" herdr agent read "$name" 2>/dev/null || herdr agent read "$name" --source visible --lines 60 --format text 2>/dev/null \
       | sed 's/\x1b\[[0-9;]*m//g' \
       | grep -vE '^\s*$|^[─╭╰│╮╯]|^\s*❯|shift\+tab|for shortcuts|auto mode|manual mode|↓$' \
       | tail -14)
@@ -70,6 +72,7 @@ print(next((x['cwd'] for x in a if (x.get('name') or x['pane_id'])=='$name'), ''
 
   # ntfy caps a message around 4KB; keep well under and end on a whole line.
   printf '%s' "$txt" | tail -c 1400 | sed '1d'
+  return 0
 }
 
 
