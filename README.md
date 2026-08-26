@@ -98,7 +98,7 @@ cp completions/_fleet ~/.zsh/completions/
 | `fleet space <path> [--agent kind]` | Scaffold a workspace: agent + app + shell, nvim tab, lazygit tab |
 | `fleet preview <path>` | Start that repo's dev server on a free port; print the localhost URL |
 | `fleet preview --list / --logs <n> / --stop <n> / --stop-all` | Manage running previews |
-| `fleet todo [--all]` | Open markdown checkbox tasks from your notes |
+| `fleet todo [--all]` | Open tasks from a Loom vault or any markdown notes, ranked by due date and priority |
 | `fleet trees [--all\|--prune\|--rm <branch>]` | Task worktrees with dirty/ahead/merged state and attached agents |
 
 ## Workspace layout
@@ -216,6 +216,20 @@ The branch keeps its real name; the agent name is what you use with `fleet read`
 `fleet handoff`, and phone replies — and the relay matches case-insensitively, so
 `CP-3762: ...` finds `cp-3762`.
 
+## Reading your task list
+
+`fleet todo` understands [Loom](https://github.com/) vault syntax and plain markdown:
+
+- `- [ ]` open and `- [/]` in progress
+- `📅 YYYY-MM-DD` due dates — overdue and due-today sort first
+- `⏫ 🔼 🔽` priority
+- `#tags` — `#work/<repo>` and `#p/<project>` are surfaced so a task can be mapped
+  to a repo; `#status/backlog` is hidden unless you pass `--all`
+- Ticket keys (`ABC-123`) are pulled out as a prefix
+
+Carryover repeats a task across daily notes, so entries are de-duplicated to the
+freshest copy, and Loom's `(conflict)` sync files are skipped.
+
 ## Configuration
 
 `~/.config/fleet/config` is sourced if present:
@@ -229,7 +243,7 @@ FLEET_PERMISSION_MODE="auto"
 # Default agent per project tree; longest matching prefix wins.
 FLEET_AGENT_DEFAULTS="$HOME/work=cursor:$HOME/personal=claude"
 FLEET_AGENT="claude"
-FLEET_TODO_PATHS="$HOME/notes"
+FLEET_TODO_PATHS="$HOME/Documents/loom:$HOME/notes"
 ```
 
 `fleet run` and `fleet space` pick the agent from `FLEET_AGENT_DEFAULTS` unless you
