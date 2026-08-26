@@ -327,6 +327,10 @@ as a launch agent (macOS):
 ```
 
 Starts at login, restarts if it dies, logs to `~/.local/state/fleet/babysit.log`.
+Note `caffeinate -i` prevents the *system* sleeping, not the *display*. Your screen
+going dark is expected and harmless — agents keep running. Only system sleep stops
+them.
+
 `fleet babysit --toggle` starts or stops the daemon (this is what the menu bar and
 Raycast call), `--status` prints `on`/`off`, and `--stop` kills a foreground instance.
 

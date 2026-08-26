@@ -248,7 +248,15 @@ cmd_babysit() {
         fi
         return 0 ;;
       --status)
-        launchctl list 2>/dev/null | grep -q "dev.fleet.babysit" && echo on || echo off
+        local jp
+        jp=$(launchctl list 2>/dev/null | awk '$3=="dev.fleet.babysit"{print $1}')
+        if [ -n "$jp" ] && [ "$jp" != "-" ] && kill -0 "$jp" 2>/dev/null; then
+          echo on
+        elif pgrep -f "fleet babysit" >/dev/null 2>&1; then
+          echo "on (foreground)"
+        else
+          echo off
+        fi
         return 0 ;;
       --stop)
         local L="${XDG_STATE_HOME:-$HOME/.local/state}/fleet/babysit.lock"
@@ -279,10 +287,13 @@ cmd_babysit() {
   # only one babysit at a time, or every notification goes out twice
   local lock="${XDG_STATE_HOME:-$HOME/.local/state}/fleet/babysit.lock"
   mkdir -p "$(dirname "$lock")"
-  if [ -f "$lock" ] && kill -0 "$(cat "$lock" 2>/dev/null)" 2>/dev/null; then
-    echo "fleet: babysit is already running (pid $(cat "$lock")). One instance watches everything." >&2
+  local lpid; lpid=$(cat "$lock" 2>/dev/null || true)
+  if [ -n "$lpid" ] && kill -0 "$lpid" 2>/dev/null && ps -p "$lpid" -o command= 2>/dev/null | grep -q "fleet"; then
+    echo "fleet: babysit is already running (pid $lpid). One instance watches everything." >&2
     return 1
   fi
+  [ -n "$lpid" ] && echo "fleet: clearing stale lock from pid $lpid"
+  rm -f "$lock"
   echo $$ > "$lock"
 
   # keep the Mac awake for as long as this runs
