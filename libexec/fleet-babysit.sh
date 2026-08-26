@@ -49,6 +49,71 @@ _agent_ask() { # name [socket] -> the question an agent is blocked on
     | tail -4 | tr '\n' ' ' | cut -c1-180
 }
 
+
+# --- inbound relay: answer an agent by publishing to <topic>-in from your phone --
+_relay_state() { echo "${XDG_STATE_HOME:-$HOME/.local/state}/fleet/relay-since"; }
+
+_relay_poll() { # read new messages on the inbound topic and feed them to agents
+  local topic="${FLEET_NTFY_TOPIC:-}-in" st since msgs
+  [ -n "${FLEET_NTFY_TOPIC:-}" ] || return 0
+  st=$(_relay_state); since=$(cat "$st" 2>/dev/null || echo "all")
+
+  msgs=$(curl -s -m 20 "https://ntfy.sh/${topic}/json?poll=1&since=${since}" 2>/dev/null | python3 -c "
+import sys,json
+last=None
+out=[]
+for line in sys.stdin:
+    line=line.strip()
+    if not line: continue
+    try: d=json.loads(line)
+    except Exception: continue
+    if d.get('event')!='message': continue
+    last=d.get('id')
+    out.append((d.get('message') or '').replace(chr(10),' '))
+for m in out: print('MSG	'+m)
+if last: print('LAST	'+last)
+" 2>/dev/null)
+  [ -n "$msgs" ] || return 0
+
+  local kind rest agent text
+  while IFS=$'\t' read -r kind rest; do
+    case "$kind" in
+      LAST) printf '%s' "$rest" > "$st" ;;
+      MSG)
+        agent="${rest%%:*}"; text="${rest#*:}"
+        agent="$(printf '%s' "$agent" | tr -d '[:space:]')"
+        text="$(printf '%s' "$text" | sed 's/^ *//')"
+        if [ -z "$agent" ] || [ "$agent" = "$rest" ] || [ -z "$text" ]; then
+          echo "  [relay] ignored (expected '<agent>: message'): ${rest:0:60}"
+          continue
+        fi
+        # only ever target an agent that actually exists
+        local sock found=""
+        while IFS=$'\t' read -r sname ssock; do
+          [ -n "$ssock" ] || continue
+          if HERDR_SOCKET_PATH="$ssock" herdr agent list 2>/dev/null | grep -q "\"name\":\"$agent\""; then
+            found="$ssock"; break
+          fi
+        done < <(_sessions)
+        if [ -z "$found" ]; then
+          echo "  [relay] no agent named '$agent'"
+          _notify "relay: no agent '$agent'" "Nothing dispatched under that name." default warning
+          continue
+        fi
+        HERDR_SOCKET_PATH="$found" herdr agent prompt "$agent" "$text" >/dev/null 2>&1 || true
+        sleep 2
+        HERDR_SOCKET_PATH="$found" herdr agent send-keys "$agent" Enter >/dev/null 2>&1 || true
+        echo "  [relay] -> $agent: ${text:0:60}"
+        _notify "➡️ sent to $agent" "${text:0:150}" default incoming_envelope
+        # a fresh answer means it may block again; allow a new alert
+        seen_blocked="${seen_blocked// $agent / }"
+        ;;
+    esac
+  done <<EOS
+$msgs
+EOS
+}
+
 cmd_babysit() {
   local interval=30 topic="${FLEET_NTFY_TOPIC:-}" once=0 keep=0 grace=120
   while [ $# -gt 0 ]; do
@@ -182,6 +247,7 @@ EOS
       fi
     fi
 
+    _relay_poll
     printf '\r  %s working, %s blocked, %s done   ' "${n_work:-0}" "${n_block:-0}" "${n_idle:-0}"
     sleep "$interval"
     elapsed=$((elapsed+interval))

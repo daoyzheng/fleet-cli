@@ -254,6 +254,27 @@ Refreshes every 10s (the `.10s.` in the filename — rename to change it).
 
 Assign a hotkey to the toggle if you flip it often.
 
+### Answering an agent from your phone
+
+`babysit` also polls an **inbound** topic — your outbound topic with `-in` appended —
+and feeds anything it finds to the named agent:
+
+```
+nav-menu-builder: yes, use a separate tab for navigation
+```
+
+Publish that from the ntfy app (or any HTTP client) and the agent receives it as a
+prompt. It works for **every agent kind**, including ones with no native remote
+control of their own, because the transport is the terminal, not the vendor.
+
+Messages must be `<agent>: <message>`; anything else is ignored, and an unknown agent
+name is reported rather than guessed at. Every relayed message is echoed to the log
+and acknowledged with a push.
+
+**Treat the inbound topic as a credential.** Anyone who knows it can put words in your
+agents' mouths. It is a separate topic from the outbound one so you can rotate it
+alone, and agents run in isolated worktrees, but do not share it.
+
 ### Running it as a daemon
 
 `fleet babysit` only notifies while it is running. To never miss a completion, load it
