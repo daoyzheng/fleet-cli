@@ -267,9 +267,19 @@ Publish that from the ntfy app (or any HTTP client) and the agent receives it as
 prompt. It works for **every agent kind**, including ones with no native remote
 control of their own, because the transport is the terminal, not the vendor.
 
-Messages must be `<agent>: <message>`; anything else is ignored, and an unknown agent
-name is reported rather than guessed at. Every relayed message is echoed to the log
-and acknowledged with a push.
+Addressing is designed for typing on a phone:
+
+| You send | Goes to |
+|---|---|
+| `use a separate tab` | the agent that last asked you something, or the only one running |
+| `2: use a separate tab` | agent #2 from the roster |
+| `nav: use a separate tab` | the only agent whose name contains `nav` |
+| `?` (or `who`, `list`) | nothing — pushes back the numbered roster |
+
+Roster numbers are stable (agents sorted by name) so the number you read in a push is
+the number you reply with. A bare message that could go to several agents is not
+guessed at — it asks. Every relayed message is echoed to the log and acknowledged
+with a push.
 
 **Treat the inbound topic as a credential.** Anyone who knows it can put words in your
 agents' mouths. It is a separate topic from the outbound one so you can rotate it

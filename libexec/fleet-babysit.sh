@@ -51,6 +51,25 @@ _agent_ask() { # name [socket] -> the question an agent is blocked on
 
 
 # --- inbound relay: answer an agent by publishing to <topic>-in from your phone --
+_agent_names() { _all_agents | awk -F'|' '{print $1}' | sort; }
+
+_resolve_agent() { # accepts an exact name, a number from the roster, or a unique prefix
+  local want="$1" names n hit
+  names=$(_agent_names)
+  [ -n "$names" ] || return 1
+  # exact
+  printf '%s\n' "$names" | grep -qx "$want" && { printf '%s' "$want"; return 0; }
+  # roster number
+  case "$want" in
+    ''|*[!0-9]*) ;;
+    *) n=$(printf '%s\n' "$names" | sed -n "${want}p"); [ -n "$n" ] && { printf '%s' "$n"; return 0; }; return 1 ;;
+  esac
+  # unique case-insensitive prefix / substring
+  hit=$(printf '%s\n' "$names" | grep -i -- "$want" || true)
+  [ "$(printf '%s\n' "$hit" | grep -c .)" = "1" ] && { printf '%s' "$hit"; return 0; }
+  return 1
+}
+
 _relay_state() { echo "${XDG_STATE_HOME:-$HOME/.local/state}/fleet/relay-since"; }
 
 _relay_poll() { # read new messages on the inbound topic and feed them to agents
@@ -91,13 +110,14 @@ if last: print('LAST	'+last)
         # "?" or "who" -> push the current roster instead of prompting anyone
         case "$trimmed" in
           "?"|who|list|agents|status)
-            roster=""
-            while IFS='|' read -r rn rs rk rsess; do
-              [ -n "$rn" ] || continue
-              roster="${roster}${rn} [${rs}] $(_agent_gist "$rn")
+            roster=""; local i=0 rn2
+            while read -r rn2; do
+              [ -n "$rn2" ] || continue
+              i=$((i+1))
+              roster="${roster}${i}. ${rn2} — $(_agent_gist "$rn2")
 "
             done <<EOR
-$(_all_agents)
+$(_agent_names)
 EOR
             _notify "🗒 agents" "${roster:-nothing dispatched}" default clipboard
             echo "  [relay] roster sent"
@@ -106,8 +126,17 @@ EOR
 
         agent="${trimmed%%:*}"; text="${trimmed#*:}"
         agent="$(printf '%s' "$agent" | tr -d '[:space:]')"
-        # a "name" this long is not a name — treat the whole thing as a bare message
         [ "${#agent}" -gt 40 ] && agent="$trimmed"
+        if [ "$agent" != "$trimmed" ]; then
+          local resolved
+          if resolved=$(_resolve_agent "$agent"); then
+            agent="$resolved"
+          else
+            _notify "no match for '$agent'" "Send ? for the numbered list." high question
+            echo "  [relay] could not resolve '$agent'"
+            continue
+          fi
+        fi
         text="$(printf '%s' "$text" | sed 's/^ *//')"
 
         # No "agent:" prefix? Route it for them.
@@ -121,8 +150,8 @@ EOR
             if [ "${n_names:-0}" -eq 1 ]; then
               agent="$(printf '%s' "$names" | tr -d '[:space:]')"
             else
-              roster=$(printf '%s\n' "$names" | sed 's/^/• /' | tr '\n' ' ')
-              _notify "which agent?" "Prefix with a name: $roster" high question
+              roster=$(printf '%s\n' "$names" | awk '{print NR". "$0}' | tr '\n' ' ')
+              _notify "which agent?" "Reply like  2: your message   —  $roster" high question
               echo "  [relay] ambiguous, asked which agent"
               continue
             fi
