@@ -96,6 +96,13 @@ _resolve_agent() { # accepts an exact name, a number from the roster, or a uniqu
   return 1
 }
 
+_babysit_running() { # true only if the process really exists
+  local jp
+  jp=$(launchctl list 2>/dev/null | awk '$3=="dev.fleet.babysit"{print $1}')
+  { [ -n "$jp" ] && [ "$jp" != "-" ] && kill -0 "$jp" 2>/dev/null; } && return 0
+  pgrep -f "fleet babysit --keep" >/dev/null 2>&1
+}
+
 _relay_state() { echo "${XDG_STATE_HOME:-$HOME/.local/state}/fleet/relay-since"; }
 
 _relay_poll() { # read new messages on the inbound topic and feed them to agents
@@ -234,14 +241,19 @@ cmd_babysit() {
       --test)     once=1; shift ;;
       --toggle)
         local P="$HOME/Library/LaunchAgents/dev.fleet.babysit.plist"
-        if launchctl list 2>/dev/null | grep -q "dev.fleet.babysit"; then
+        local i
+        if _babysit_running; then
           launchctl unload "$P" 2>/dev/null
           pkill -f "caffeinate -i -w" 2>/dev/null || true
           rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/fleet/babysit.lock"
-          echo "🛑 babysit stopped — no phone notifications"
+          # settle before returning, so whoever called us reads the final state
+          for i in 1 2 3 4 5 6 7 8; do _babysit_running || break; sleep 0.5; done
+          _babysit_running && echo "⚠️ still running — try: launchctl unload $P" \
+                           || echo "🛑 babysit stopped — no phone notifications"
         elif [ -f "$P" ]; then
-          launchctl load "$P" 2>/dev/null; sleep 2
-          if launchctl list 2>/dev/null | grep -q "dev.fleet.babysit"; then
+          launchctl load "$P" 2>/dev/null
+          for i in $(seq 1 20); do _babysit_running && break; sleep 0.5; done
+          if _babysit_running; then
             echo "🛎️ babysit running — Mac stays awake, phone gets pushes"
           else
             echo "⚠️ failed to start — see ~/.local/state/fleet/babysit.err"
