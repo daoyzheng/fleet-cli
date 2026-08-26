@@ -56,6 +56,10 @@ fleet — parallel agent dispatch over herdr
       Start that repo/worktree's dev server on a free, deterministic port and
       print the localhost URL. Also: --list, --logs <name>, --stop <name>, --stop-all.
 
+  fleet todo [--all]
+      Open markdown checkbox tasks from $FLEET_TODO_PATHS (default ~/base),
+      most recently edited files first. Ticket keys are highlighted.
+
   fleet trees [--all|--prune|--rm <branch>]
       List TASK worktrees (the ones agents create) with dirty/ahead/merged
       state and any agent attached. Every repo's own folder is also a worktree,
@@ -80,6 +84,9 @@ done
 : "${FMT:?fleet-fmt.py not found next to fleet or in ~/.local/libexec}"
 for c in "$SELF_DIR/fleet-trees.py" "$SELF_DIR/../libexec/fleet-trees.py" "$HOME/.local/libexec/fleet-trees.py"; do
   [ -f "$c" ] && { TREES="$c"; break; }
+done
+for c in "$SELF_DIR/fleet-todo.py" "$SELF_DIR/../libexec/fleet-todo.py" "$HOME/.local/libexec/fleet-todo.py"; do
+  [ -f "$c" ] && { TODO="$c"; break; }
 done
 for c in "$SELF_DIR/fleet-handoff.py" "$SELF_DIR/../libexec/fleet-handoff.py" "$HOME/.local/libexec/fleet-handoff.py"; do
   [ -f "$c" ] && { HANDOFF="$c"; break; }
@@ -356,6 +363,7 @@ case "${1:-}" in
   status) cmd_status ;;
   ready)  cmd_ready ;;
   trees)  shift; cmd_trees "$@" ;;
+  todo)   shift; FLEET_TODO_PATHS="${FLEET_TODO_PATHS:-$HOME/base}" python3 "$TODO" "$@" ;;
   preview) shift; cmd_preview "$@" ;;
   babysit) shift; cmd_babysit "$@" ;;
   space)   shift; cmd_space "$@" ;;

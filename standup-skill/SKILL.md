@@ -9,17 +9,43 @@ Turn a rough list of intentions into parallel agent work. The output is a **disp
 plan** — a set of tasks that can safely run at the same time, plus the commands to
 launch them.
 
-## Step 1 — Collect
+## Step 1 — Gather, then let them choose
 
-Take whatever the user gives you: a bullet list, a paste of ticket keys, or a
-sentence. Then fill gaps:
+**Start by showing what's on the plate, not by asking what they want.** Pull from
+every source available, then present one numbered list to pick from.
 
-- If a task names a ticket, fetch it (Jira/Linear MCP, `az boards`, `gh issue`) and
-  use the real title and description rather than the user's shorthand.
-- If a task is vague ("fix the fund table thing"), ask **one** clarifying question —
-  or state the interpretation you're going with and move on. Don't interrogate.
-- Ask what's already in flight. Run `fleet status` and fold running agents into the
-  picture; don't dispatch something an agent is already doing.
+Run these in parallel:
+
+- **Ticket tracker.** Issues assigned to the user and not done. Filter hard — an
+  assigned-issues query commonly returns dozens, which is not a day's work. Prefer
+  `In Progress` first, then `To Do`, then anything updated in the last week. Sort by
+  priority. Show at most ~10.
+- **`fleet todo`** — open markdown checkbox tasks from their notes, most recently
+  edited files first. These are the things that never made it into a ticket.
+- **`fleet`** — what is already running or waiting. Never propose something an agent
+  is already doing, and surface anything finished that still needs review.
+
+Then present a single list, grouped by source, each line numbered:
+
+```
+JIRA — assigned to you
+ 1. SFCRM-7112  P1  Peer Review   Include PE Portfolios as billable
+ 2. SFCRM-7180  P2  To Do         Map "Not Applicable" Payment Method to QFM
+ 3. CP-3726     P4  To Do         [SPIKE] Document CP Docs relationship
+
+NOTES — ~/base/work/tasks.md
+ 4. Investigate mawer.com fund api issue
+ 5. MW-683 Daily fund valuation file upload automation
+
+ALREADY RUNNING
+ -  nav-menu-builder — finished, waiting on your review
+```
+
+Ask: **"Which of these today?"** They reply with numbers. Only then do you size and
+group them.
+
+Do not fetch full ticket descriptions for everything up front — that is slow and most
+will not be chosen. Fetch the detail only for what they pick.
 
 ## Step 2 — Locate and size
 
@@ -30,6 +56,7 @@ For each task determine:
 | **Repo(s)** | which of the user's repos it touches — read the parent `AGENTS.md` repo map if there is one |
 | **Size** | S (< 30 min, one file), M (a feature in one repo), L (multi-repo or migration) |
 | **Branch** | the ticket key if there is one, else a short kebab slug |
+| **Agent** | `fleet` picks it from `FLEET_AGENT_DEFAULTS` by repo path — do not pass `-k` unless there is a reason. Say which kind each task will get so the user can override. |
 
 Be concrete about repos. "Add a testimonial section" is not one task — per the repo
 map it may be a change across a CMS, its frontend consumer, and a builder that vendors

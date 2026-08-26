@@ -98,6 +98,7 @@ cp completions/_fleet ~/.zsh/completions/
 | `fleet space <path> [--agent kind]` | Scaffold a workspace: agent + app + shell, nvim tab, lazygit tab |
 | `fleet preview <path>` | Start that repo's dev server on a free port; print the localhost URL |
 | `fleet preview --list / --logs <n> / --stop <n> / --stop-all` | Manage running previews |
+| `fleet todo [--all]` | Open markdown checkbox tasks from your notes |
 | `fleet trees [--all\|--prune\|--rm <branch>]` | Task worktrees with dirty/ahead/merged state and attached agents |
 
 ## Workspace layout
@@ -228,6 +229,7 @@ FLEET_PERMISSION_MODE="auto"
 # Default agent per project tree; longest matching prefix wins.
 FLEET_AGENT_DEFAULTS="$HOME/work=cursor:$HOME/personal=claude"
 FLEET_AGENT="claude"
+FLEET_TODO_PATHS="$HOME/notes"
 ```
 
 `fleet run` and `fleet space` pick the agent from `FLEET_AGENT_DEFAULTS` unless you
@@ -356,7 +358,9 @@ read by both Claude Code and Cursor.
 - **`/ship`** — one task through orient → plan → implement → verify → review →
   handoff. Stage 3 refuses to claim success without pasted command output; Stage 5
   emits a fixed summary ending in *"test this yourself"*.
-- **`/standup`** — turns a day's rough task list into a dispatch plan: what runs in
+- **`/standup`** — gathers the day's candidate work from your ticket tracker and your
+  notes (`fleet todo`), shows one numbered list to pick from, then turns the picks
+  into a dispatch plan: what runs in
   parallel, what must be sequenced behind a shared contract, what to hold back. Emits
   the `fleet run` commands and waits for your approval before spending anything.
 
