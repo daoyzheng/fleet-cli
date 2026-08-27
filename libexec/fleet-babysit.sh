@@ -112,6 +112,8 @@ _babysit_running() { # true only if the process really exists
 _relay_state() { echo "${XDG_STATE_HOME:-$HOME/.local/state}/fleet/relay-since"; }
 
 _relay_poll() { # read new messages on the inbound topic and feed them to agents
+  # A transient network failure must never take the daemon down.
+  set +e
   local topic="${FLEET_NTFY_TOPIC:-}-in" st since msgs
   [ -n "${FLEET_NTFY_TOPIC:-}" ] || return 0
   st=$(_relay_state)
@@ -121,7 +123,7 @@ _relay_poll() { # read new messages on the inbound topic and feed them to agents
   fi
   since=$(cat "$st" 2>/dev/null || date +%s)
 
-  msgs=$(curl -s -m 20 "https://ntfy.sh/${topic}/json?poll=1&since=${since}" 2>/dev/null | python3 -c "
+  msgs=$({ curl -s -m 20 "https://ntfy.sh/${topic}/json?poll=1&since=${since}" 2>/dev/null || true; } | python3 -c "
 import sys,json
 last=None
 out=[]
@@ -135,7 +137,7 @@ for line in sys.stdin:
     out.append((d.get('message') or '').replace(chr(10),' '))
 for m in out: print('MSG	'+m)
 if last: print('LAST	'+last)
-" 2>/dev/null)
+" 2>/dev/null || true)
   [ -n "$msgs" ] || return 0
 
   local kind rest agent text
@@ -333,12 +335,18 @@ cmd_babysit() {
   echo $$ > "$lock"
 
   # keep the Mac awake for as long as this runs
-  caffeinate -i -w $$ &
-  FLEET_CAFF_PID=$!
+  if launchctl list 2>/dev/null | awk '$3=="dev.fleet.caffeinate"{print $1}' | grep -qE '^[0-9]+$'; then
+    FLEET_CAFF_PID=""     # a dedicated launch agent already holds the assertion
+  else
+    caffeinate -i -w $$ &
+    FLEET_CAFF_PID=$!
+  fi
   trap '[ -n "${FLEET_CAFF_PID:-}" ] && kill "$FLEET_CAFF_PID" 2>/dev/null; return 0' INT TERM
   trap '[ -n "${FLEET_CAFF_PID:-}" ] && kill "$FLEET_CAFF_PID" 2>/dev/null; rm -f "'"$lock"'"' EXIT
 
-  echo "babysitting — topic: $topic, every ${interval}s${keep:+, staying up}. Ctrl-C to stop."
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] babysitting — topic: $topic, every ${interval}s${keep:+, staying up}. Ctrl-C to stop."
+  # Transient failures (network, herdr restart) must not end the watch.
+  set +e
   local seen_blocked="" summary n_work n_block n_idle
   local elapsed=0 ever_worked=0 quiet=0 announced=0
 

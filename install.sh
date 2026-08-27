@@ -25,6 +25,13 @@ if [ "${1:-}" = "--ui" ]; then
   launchctl unload "$PLIST" 2>/dev/null || true
   launchctl load "$PLIST" 2>/dev/null && echo "loaded launch agent dev.fleet.babysit"
 
+  # Keeping the Mac awake is deliberately a separate job: a watcher that dies
+  # must not also let the machine sleep.
+  CAFF="$HOME/Library/LaunchAgents/dev.fleet.caffeinate.plist"
+  sed "s|__HOME__|$HOME|g" "$SRC/dev.fleet.caffeinate.plist.in" > "$CAFF"
+  launchctl unload "$CAFF" 2>/dev/null || true
+  launchctl load "$CAFF" 2>/dev/null && echo "loaded launch agent dev.fleet.caffeinate"
+
   # SwiftBar reads this repo's swiftbar/ directly — no copy
   if [ -d "/Applications/SwiftBar.app" ]; then
     defaults write com.ameba.SwiftBar PluginDirectory -string "$SRC/swiftbar"

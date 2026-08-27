@@ -179,6 +179,11 @@ topic summaries — you can answer any blocked agent from your phone, not just o
 translates: Claude/Codex get `--permission-mode`, Cursor gets `--auto-review --trust`
 for `auto` or `--force --trust` for the more permissive modes.
 
+Sleep prevention is a **separate launch agent** (`dev.fleet.caffeinate`), not something
+babysit owns. A watcher that dies must not also let the machine sleep — and it did
+exactly that until this was split out. babysit only spawns its own `caffeinate` when
+that agent is not installed.
+
 `fleet babysit` holds `caffeinate` for as long as it runs, polls every 30s, and pushes
 via [ntfy.sh](https://ntfy.sh) — once per agent that becomes **blocked** (it needs you
 now) and once when **everything settles**.
