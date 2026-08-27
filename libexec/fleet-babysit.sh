@@ -29,6 +29,17 @@ for x in a:
   done < <(_sessions)
 }
 
+_awaiting_input() { # name [socket] -> 0 if its pane is showing a question
+  local raw
+  if [ -n "${2:-}" ]; then
+    raw=$(HERDR_SOCKET_PATH="$2" herdr agent read "$1" --source visible --lines 30 --format text 2>/dev/null || true)
+  else
+    raw=$(herdr agent read "$1" --source visible --lines 30 --format text 2>/dev/null || true)
+  fi
+  printf '%s\n' "$raw" | sed 's/\x1b\[[0-9;]*m//g' \
+    | grep -qE "Enter next/submit|Space select|Esc to skip|type to answer|↑/↓ option|\[ \] Other:"
+}
+
 _agent_gist() { # name [socket] -> "[kind] what the agent is on about"
   local sk="${2:-${HERDR_SOCKET_PATH:-}}"
   { [ -n "$sk" ] && HERDR_SOCKET_PATH="$sk" herdr agent list 2>/dev/null || herdr agent list 2>/dev/null; } | python3 -c "
@@ -64,10 +75,17 @@ print(next((x['cwd'] for x in a if (x.get('name') or x['pane_id'])=='$name'), ''
 
   # Fallback (Cursor and anything without a transcript): scrape the pane.
   if [ -z "$txt" ]; then
-    txt=$({ [ -n "$sock" ] && HERDR_SOCKET_PATH="$sock" herdr agent read "$name" 2>/dev/null || herdr agent read "$name" --source visible --lines 60 --format text 2>/dev/null \
+    local raw
+    if [ -n "$sock" ]; then
+      raw=$(HERDR_SOCKET_PATH="$sock" herdr agent read "$name" --source visible --lines 60 --format text 2>/dev/null || true)
+    else
+      raw=$(herdr agent read "$name" --source visible --lines 60 --format text 2>/dev/null || true)
+    fi
+    txt=$(printf '%s\n' "$raw" \
       | sed 's/\x1b\[[0-9;]*m//g' \
-      | grep -vE '^\s*$|^[─╭╰│╮╯]|^\s*❯|shift\+tab|for shortcuts|auto mode|manual mode|↓$' \
-      | tail -14)
+      | sed 's/^[[:space:]]*│[[:space:]]*//; s/[[:space:]]*│[[:space:]]*$//' \
+      | grep -vE '^\s*$|^[─╭╰│╮╯▄▀]|^\s*❯|shift\+tab|for shortcuts|auto mode|manual mode|↓$|Add a follow-up|Opus 5|Auto-review' \
+      | tail -16)
   fi
 
   # ntfy caps a message around 4KB; keep well under and end on a whole line.
@@ -364,7 +382,13 @@ cmd_babysit() {
 
     # notify once per newly-blocked agent — these need a human now
     local a
-    for a in $(printf '%s\n' "$named" | awk -F'|' '$2=="blocked"{print $1}'); do
+    local waiting
+    waiting=$(printf '%s\n' "$named" | awk -F'|' '$2=="blocked"{print $1}')
+    for a in $(printf '%s\n' "$named" | awk -F'|' '$2=="idle"||$2=="done"{print $1}'); do
+      _awaiting_input "$a" && waiting="$waiting
+$a"
+    done
+    for a in $(printf '%s\n' "$waiting" | grep -v '^$' || true); do
       case " $seen_blocked " in
         *" $a "*) ;;
         *) local ask gist
